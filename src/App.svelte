@@ -8,6 +8,8 @@
   import Week from './screens/Week.svelte';
   import Workout from './screens/Workout.svelte';
   import Summary from './screens/Summary.svelte';
+  import Settings from './screens/Settings.svelte';
+  import { lastSyncAt, onImported, onSyncChange, startAutoSync, syncLabel, syncStatus } from './lib/sync';
   import RestDock from './ui/RestDock.svelte';
   import { watchWorkout } from './lib/session.svelte';
   import Nav from './ui/Nav.svelte';
@@ -15,8 +17,15 @@
   import Toast from './ui/Toast.svelte';
   import { toasts, clearToast } from './ui/toast.svelte';
 
-  /** Text for the sync indicator; main.ts wires the real status from src/lib/sync.ts later. */
-  let { syncStatus = 'Saved on phone', syncWarn = false }: { syncStatus?: string; syncWarn?: boolean } = $props();
+  /** Sync indicator shown on Home, refreshed from src/lib/sync.ts after every flush and queue change. */
+  let sync = $state(syncLabel('not-set-up', null));
+  async function refreshSync() {
+    try {
+      sync = syncLabel(await syncStatus(), await lastSyncAt());
+    } catch {
+      /* storage unavailable: keep the last label */
+    }
+  }
 
   let route = $state(parseRoute(location.hash));
 
@@ -26,13 +35,27 @@
    * Unregistered routes show a placeholder.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout, summary: Summary };
+  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout, summary: Summary, settings: Settings };
   const Screen = $derived(screens[route]);
   const showNav = $derived(['home', 'workout', 'progress', 'week'].includes(route));
 
   onMount(() => {
     workout.restore().catch(() => undefined);
+    // Sync: queue flushes on start, after each set (2 s debounce), when back online / visible / leaving.
+    startAutoSync();
+    void refreshSync();
+    const offSync = onSyncChange(() => void refreshSync());
+    // Sets and custom exercises imported from the Sheet: the store's caches must see them.
+    const offImport = onImported(() => void workout.refreshShared().catch(() => undefined));
+    const vis = () => document.visibilityState === 'visible' && void refreshSync();
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      offSync();
+      offImport();
+      document.removeEventListener('visibilitychange', vis);
+    };
   });
+  // Wake lock while a workout is open, auto-end checked every 60 s and on visibilitychange, storage.persist() once.
   onMount(() => watchWorkout(workout));
 </script>
 
@@ -40,7 +63,7 @@
 
 <main data-route={route}>
   {#if Screen}
-    <Screen {syncStatus} {syncWarn} />
+    <Screen syncStatus={sync.text} syncWarn={sync.warn} />
   {:else}
     <section class="screen">
       <h1 class="page-title">{route.charAt(0).toUpperCase() + route.slice(1)}</h1>
@@ -62,5 +85,6 @@
 
 <style>
   .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; pointer-events: none; }
-  .dock > :global(*) { pointer-events: auto; }
+  /* Bars take taps; sheets, scrims and the rest dock decide for themselves, so a closed one never blocks a tap. */
+  .dock > :global(*:not(.scrim):not(.sheet):not(.rest)) { pointer-events: auto; }
 </style>
