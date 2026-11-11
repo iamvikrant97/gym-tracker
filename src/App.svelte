@@ -6,6 +6,7 @@
   import Home from './screens/Home.svelte';
   import Progress from './screens/Progress.svelte';
   import Week from './screens/Week.svelte';
+  import Workout from './screens/Workout.svelte';
   import Nav from './ui/Nav.svelte';
   import SpotifyBar from './ui/SpotifyBar.svelte';
   import Toast from './ui/Toast.svelte';
@@ -22,7 +23,7 @@
    * Unregistered routes show a placeholder.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week };
+  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout };
   const Screen = $derived(screens[route]);
   const showNav = $derived(['home', 'workout', 'progress', 'week'].includes(route));
 

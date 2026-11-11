@@ -4,6 +4,7 @@
   import { homeNotes, weekStart } from '../lib/stats';
   import { nextSession } from '../lib/selection';
   import { workout, localDate } from '../lib/workout.svelte';
+  import { estimateMinutes } from '../lib/workoutView';
   import type { SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
   import Sheet from '../ui/Sheet.svelte';
 
@@ -52,16 +53,16 @@
 
   function describe(t: SessionTemplate) {
     let setCount = 0;
-    let seconds = 0;
+    const rests: number[] = [];
     const items = t.items.map((item) => {
       const id = effectiveId(t, item.exerciseId);
       const ex = exerciseById(id) ?? workout.exercise(id);
       const rest = Math.min(settings.restOverrides[id] ?? ex?.restSec ?? 120, 300);
       setCount += item.sets;
-      seconds += item.sets * (rest + 40);
+      for (let i = 0; i < item.sets; i++) rests.push(rest);
       return { id, name: ex?.name ?? id, sets: item.sets };
     });
-    return { items, setCount, minutes: Math.max(5, Math.round(seconds / 60 / 5) * 5) };
+    return { items, setCount, minutes: estimateMinutes(rests) };
   }
 
   const plan = $derived(describe(template));
