@@ -1,5 +1,5 @@
 // @ts-ignore plain JS module shared with Apps Script
-import { applyUpserts, applyDeletes, assignIds, readLog, readExercises, LOG_WIDTH, LOG_FIRST } from '../apps-script/core.js';
+import { applyUpserts, applyDeletes, assignIds, fillInherited, readLog, readExercises, LOG_WIDTH, LOG_FIRST } from '../apps-script/core.js';
 import { readFileSync } from 'node:fs';
 
 type Row = any[];
@@ -192,5 +192,53 @@ describe('bridge review fixes', () => {
     expect(gs).toContain('Execute as: Me');
     expect(gs).toContain('Who has access: Anyone');
     expect(gs).not.toContain('Math.random');
+  });
+});
+
+describe('rows that rely on inheritance (F1)', () => {
+  // Real sheet shape: head row carries date/day/exercise, continuation rows leave A-C blank.
+  const group = () => {
+    const log = blankLog();
+    const put = (i: number, o: Record<number, any>) => { for (const [c, v] of Object.entries(o)) log[LOG_FIRST + i][Number(c)] = v; };
+    put(0, { 0: '2026-11-09', 1: 'Chest+Back A', 2: 'Smith flat press', 5: 40, 6: 10 });
+    put(1, { 5: 40, 6: 9 });
+    put(2, { 5: 40, 6: 8 });
+    put(3, { 2: 'Pec fly machine', 5: 30, 6: 12 }); // new exercise, inherits date and day
+    return log;
+  };
+  const prep = (log: Row[]) => {
+    let n = 0;
+    return assignIds(fillInherited(log).logRows, () => `g${++n}`).logRows;
+  };
+
+  it('fillInherited writes inherited date/day/exercise into every row that has reps but blank A-C', () => {
+    const f = fillInherited(group());
+    expect(f.filled).toBe(3); // rows changed: the two continuation rows and the Pec fly row
+    for (let i = 0; i < 4; i++) expect(f.logRows[LOG_FIRST + i].slice(0, 3)).toEqual([
+      '2026-11-09', 'Chest+Back A', i < 3 ? 'Smith flat press' : 'Pec fly machine']);
+    expect(fillInherited(f.logRows).filled).toBe(0); // idempotent
+  });
+
+  it('deleting the head row leaves the other rows with their own date, day and exercise', () => {
+    const log = prep(group());
+    const before = readLog(log);
+    const after = readLog(applyDeletes(log, [before[0].id]));
+    expect(after).toHaveLength(3);
+    expect(after.slice(0, 2).map((r: any) => [r.date, r.day, r.exercise])).toEqual([
+      ['2026-11-09', 'Chest+Back A', 'Smith flat press'], ['2026-11-09', 'Chest+Back A', 'Smith flat press']]);
+    expect(after[2].exercise).toBe('Pec fly machine');
+  });
+
+  it('a later upsert reusing the freed row does not change other rows\' effective exercise', () => {
+    const log = prep(group());
+    const ids = readLog(log).map((r: any) => r.id);
+    const freed = applyDeletes(log, [ids[0]]);
+    const up = applyUpserts(freed, exercises(), [set({ id: 'new', exercise: 'Hammer curl', day: 'Shoulders+Arms A', date: '2026-11-11', slot: 'Biceps' })]);
+    const rows = readLog(up.logRows);
+    const by = Object.fromEntries(rows.map((r: any) => [r.id, r.exercise]));
+    expect(by[ids[1]]).toBe('Smith flat press');
+    expect(by[ids[2]]).toBe('Smith flat press');
+    expect(by[ids[3]]).toBe('Pec fly machine');
+    expect(by.new).toBe('Hammer curl');
   });
 });

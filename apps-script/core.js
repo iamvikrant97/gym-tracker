@@ -110,6 +110,28 @@ export function applyUpserts(logRows, exercisesRows, sets) {
 }
 
 /**
+ * Makes every data row self-contained: a row with reps but a blank date, day or exercise gets the value it
+ * inherits from the rows above (as the Sheet's own formulas read it). Without this, clearing or reusing the head
+ * row of a group would change what the rows below it inherit. Returns the new rows and how many rows changed.
+ * @param {any[][]} logRows
+ */
+export function fillInherited(logRows) {
+  const log = padLog(logRows);
+  let filled = 0;
+  const last = { [COL.date]: '', [COL.day]: '', [COL.exercise]: '' };
+  for (let i = LOG_FIRST; i < log.length; i++) {
+    const r = log[i];
+    let changed = false;
+    for (const c of [COL.date, COL.day, COL.exercise]) {
+      if (!blank(r[c])) last[c] = r[c];
+      else if (!blank(r[COL.reps]) && !blank(last[c])) { r[c] = last[c]; changed = true; }
+    }
+    if (changed) filled++;
+  }
+  return { logRows: log, filled };
+}
+
+/**
  * Gives every data row that has reps but no set id a generated one (rows typed by hand have none), so the app can
  * later edit or delete them in place. Returns the new rows and how many ids were assigned. Idempotent.
  * @param {any[][]} logRows

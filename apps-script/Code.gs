@@ -114,6 +114,28 @@ function applyUpserts(logRows, exercisesRows, sets) {
 }
 
 /**
+ * Makes every data row self-contained: a row with reps but a blank date, day or exercise gets the value it
+ * inherits from the rows above (as the Sheet's own formulas read it). Without this, clearing or reusing the head
+ * row of a group would change what the rows below it inherit. Returns the new rows and how many rows changed.
+ * @param {any[][]} logRows
+ */
+function fillInherited(logRows) {
+  const log = padLog(logRows);
+  let filled = 0;
+  const last = { [COL.date]: '', [COL.day]: '', [COL.exercise]: '' };
+  for (let i = LOG_FIRST; i < log.length; i++) {
+    const r = log[i];
+    let changed = false;
+    for (const c of [COL.date, COL.day, COL.exercise]) {
+      if (!blank(r[c])) last[c] = r[c];
+      else if (!blank(r[COL.reps]) && !blank(last[c])) { r[c] = last[c]; changed = true; }
+    }
+    if (changed) filled++;
+  }
+  return { logRows: log, filled };
+}
+
+/**
  * Gives every data row that has reps but no set id a generated one (rows typed by hand have none), so the app can
  * later edit or delete them in place. Returns the new rows and how many ids were assigned. Idempotent.
  * @param {any[][]} logRows
@@ -218,11 +240,21 @@ function doGet(e) {
     const ss = SpreadsheetApp.getActive();
     const logSheet = ss.getSheetByName(LOG_SHEET);
     const before = readBlock_(logSheet, LOG_WIDTH, LOG_FIRST + 1);
-    // Rows typed by hand have no set id: give them one now so the app can edit/delete them in place.
-    const { logRows, assigned } = assignIds(before, () => Utilities.getUuid());
-    if (assigned) {
+    // Rows typed by hand are made self-contained: inherited date/day/exercise are written into A-C, and each
+    // row gets a set id, so the app can edit or delete any one of them without disturbing its neighbours.
+    const filled = fillInherited(before);
+    const { logRows, assigned } = assignIds(filled.logRows, () => Utilities.getUuid());
+    if (assigned || filled.filled) {
+      const tz = tz_();
       for (let i = LOG_FIRST; i < logRows.length; i++) {
-        if (before[i] && before[i][COL.id] !== logRows[i][COL.id]) logSheet.getRange(i + 1, COL.id + 1).setValue(logRows[i][COL.id]);
+        const b = before[i];
+        if (!b) continue;
+        const a = logRows[i];
+        if (b[0] !== a[0] || b[1] !== a[1] || b[2] !== a[2]) {
+          const v = [a[0], a[1], a[2]].map((x, k) => (k === 0 && typeof x === 'string' && x ? Utilities.parseDate(x, tz, 'yyyy-MM-dd') : x));
+          logSheet.getRange(i + 1, 1, 1, 3).setValues([v]);
+        }
+        if (b[COL.id] !== a[COL.id]) logSheet.getRange(i + 1, COL.id + 1).setValue(a[COL.id]);
       }
       SpreadsheetApp.flush();
     }

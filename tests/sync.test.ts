@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { closeDb, DEFAULT_SETTINGS, getAll, put, putAll, saveSettings, addCustomExercise } from '../src/lib/db';
 import type { QueueItem } from '../src/lib/db';
-import { _resetSyncState, flush, importFromSheet, syncStatus } from '../src/lib/sync';
+import { _resetSyncState, _tune, ATTENTION_AFTER, attentionIds, backoffMs, flush, importFromSheet, onImported, scheduleFlush, startAutoSync, syncStatus } from '../src/lib/sync';
 import type { SetLog, Workout } from '../src/lib/types';
 
 const SETTINGS = { ...DEFAULT_SETTINGS, scriptUrl: 'https://script.example/exec', scriptKey: 'k3y' };
@@ -30,7 +30,10 @@ beforeEach(async () => {
   await closeDb(true);
   _resetSyncState();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('syncStatus', () => {
   it('not-set-up without settings, nothing sent', async () => {
@@ -193,7 +196,6 @@ describe('importFromSheet', () => {
 
     const f2 = okFetch(data);
     expect(await importFromSheet(f2)).toEqual({ imported: 0 });
-    expect(f2).not.toHaveBeenCalled();
     expect(await sets()).toHaveLength(3);
     expect(await getAll('customExercises')).toHaveLength(1);
   });
@@ -216,13 +218,6 @@ describe('importFromSheet', () => {
     expect(await sets()).toHaveLength(2);
   });
 
-  it('does nothing when the app already has sets', async () => {
-    await put('sets', mk('x'));
-    const f = okFetch(data);
-    expect(await importFromSheet(f)).toEqual({ imported: 0 });
-    expect(f).not.toHaveBeenCalled();
-  });
-
   it('does not import when the bridge fails', async () => {
     expect(await importFromSheet(okFetch({ ok: false, error: 'bad key' }))).toEqual({ imported: 0 });
     expect(await sets()).toEqual([]);
@@ -235,5 +230,179 @@ describe('importFromSheet', () => {
     ] });
     await importFromSheet(f);
     expect((await getAll<Workout>('workouts')).map((w) => w.sessionId).sort()).toEqual(['CB-A', 'L-A']);
+  });
+});
+
+describe('flush order (F2)', () => {
+  beforeEach(() => saveSettings(SETTINGS));
+  it('sends sets sorted by date, then doneAt, then setNo, whatever the queue key order', async () => {
+    await enqueue(mk('f0', { date: '2026-11-10', doneAt: 50, setNo: 1 }));
+    await enqueue(mk('a1', { date: '2026-11-09', doneAt: 300, setNo: 3 }));
+    await enqueue(mk('3c', { date: '2026-11-09', doneAt: 100, setNo: 1 }));
+    await enqueue(mk('b2', { date: '2026-11-09', doneAt: 200, setNo: 2 }));
+    const f = okFetch();
+    await flush(f);
+    expect(bodyOf(f).upserts.map((u: { id: string }) => u.id)).toEqual(['3c', 'b2', 'a1', 'f0']);
+  });
+  it('keeps the order across batches (oldest 50 first)', async () => {
+    for (let i = 0; i < 60; i++) await enqueue(mk(`z${59 - i}`, { doneAt: 1000 - i, setNo: 1 })); // z0 is the newest
+    const f = okFetch();
+    await flush(f);
+    const first = bodyOf(f, 0).upserts.map((u: { id: string }) => u.id);
+    expect(first[0]).toBe('z0'); // z0 has the oldest doneAt
+    expect(first).toHaveLength(50);
+    expect(bodyOf(f, 1).upserts.map((u: { id: string }) => u.id)).toEqual(['z50', 'z51', 'z52', 'z53', 'z54', 'z55', 'z56', 'z57', 'z58', 'z59']);
+  });
+});
+
+describe('request details', () => {
+  beforeEach(() => saveSettings(SETTINGS));
+  afterEach(() => _tune({}));
+  it('aborts a hung request after the timeout and keeps the queue', async () => {
+    _tune({ requestMs: 30 });
+    await enqueue(mk('a'));
+    let aborted = false;
+    const f = vi.fn((_u: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_res, rej) => {
+      init!.signal!.addEventListener('abort', () => { aborted = true; rej(new DOMException('aborted', 'AbortError')); });
+    }));
+    expect(await flush(f as unknown as typeof fetch)).toEqual({ sent: 0, ok: false });
+    expect(aborted).toBe(true);
+    expect(await queue()).toHaveLength(1);
+  });
+  it('keepalive is passed when asked for', async () => {
+    await enqueue(mk('a'));
+    const f = okFetch();
+    await flush(f, { keepalive: true });
+    expect((f.mock.calls[0][1] as RequestInit).keepalive).toBe(true);
+  });
+  it('backoff doubles from 5 s up to 5 min', () => {
+    expect([1, 2, 3, 4, 7, 20].map(backoffMs)).toEqual([5000, 10000, 20000, 40000, 300000, 300000]);
+  });
+});
+
+describe('needs attention', () => {
+  beforeEach(() => saveSettings(SETTINGS));
+  it('an entry the bridge keeps skipping stops blocking after N attempts, stays queued and local, and is surfaced', async () => {
+    await enqueue(mk('bad'));
+    await enqueue(mk('good', { doneAt: 2 }));
+    const ackGood = () => vi.fn(async (...a: Parameters<typeof fetch>) => {
+      const req = JSON.parse((a[1] as RequestInit).body as string);
+      const ids = req.upserts.map((u: { id: string }) => u.id);
+      return { ok: true, json: async () => ({ ok: true, acked: ids.filter((i: string) => i !== 'bad'), skipped: ids.filter((i: string) => i === 'bad'), deleted: [] }) } as Response;
+    });
+    for (let i = 0; i < ATTENTION_AFTER; i++) {
+      const r = await flush(ackGood());
+      expect(r.ok).toBe(i === ATTENTION_AFTER - 1); // the last skip parks the entry, so it no longer blocks
+    }
+    expect(await attentionIds()).toEqual(['bad']);
+    expect(await syncStatus()).toBe('attention');
+    const f = okFetch();
+    expect(await flush(f)).toEqual({ sent: 0, ok: true });
+    expect(f).not.toHaveBeenCalled(); // not retried
+    expect(await queue()).toEqual([{ id: 'bad', op: 'upsert' }]);
+    expect((await sets()).find((x) => x.id === 'bad')).toBeTruthy();
+  });
+  it('editing the set gives it a fresh chance', async () => {
+    const bad = mk('bad');
+    await enqueue(bad);
+    for (let i = 0; i < ATTENTION_AFTER; i++) await flush(okFetch({ ok: true, acked: [], skipped: ['bad'], deleted: [] }));
+    expect(await attentionIds()).toEqual(['bad']);
+    await enqueue({ ...bad, reps: 11, updatedAt: 9 });
+    expect(await attentionIds()).toEqual([]);
+    expect(await flush(okFetch())).toEqual({ sent: 1, ok: true });
+  });
+});
+
+describe('import merges into an app that already has sets (M5, M7)', () => {
+  beforeEach(() => saveSettings(SETTINGS));
+  const rows = (ids: string[]) => ({ ok: true, log: ids.map((id, i) => ({ id, date: '2026-11-02', day: 'Legs A', exercise: 'Leg press', kg: 100, reps: 10 - i })) });
+  it('adds only rows whose id is unknown, never duplicates, and is a no-op the second time', async () => {
+    await put('sets', mk('mine', { date: '2026-11-09' }));
+    const f1 = okFetch(rows(['h1', 'h2', 'mine']));
+    expect(await importFromSheet(f1)).toEqual({ imported: 2 });
+    expect((await sets()).map((x) => x.id).sort()).toEqual(['h1', 'h2', 'mine']);
+    expect(await importFromSheet(okFetch(rows(['h1', 'h2', 'mine'])))).toEqual({ imported: 0 });
+    expect(await sets()).toHaveLength(3);
+  });
+  it('does not resurrect a set that was deleted locally (its id still exists)', async () => {
+    await put('sets', mk('gone', { deleted: true }));
+    expect(await importFromSheet(okFetch(rows(['gone'])))).toEqual({ imported: 0 });
+  });
+  it('does not create custom exercises for rows it will not import', async () => {
+    await put('sets', mk('gone'));
+    const f = okFetch({ ok: true, log: [{ id: 'gone', date: '2026-11-09', day: 'Legs A', exercise: 'Unknown thing', kg: 1, reps: 1 }] });
+    await importFromSheet(f);
+    expect(await getAll('customExercises')).toEqual([]);
+  });
+  it('tells listeners so the workout store can refresh its custom-exercise cache', async () => {
+    const seen: number[] = [];
+    const off = onImported((info) => seen.push(info.imported));
+    await importFromSheet(okFetch({ ok: true, log: [{ id: 'n1', date: '2026-11-02', day: 'Legs A', exercise: 'Mystery', kg: 1, reps: 5 }] }));
+    off();
+    expect(seen).toEqual([1]);
+    await importFromSheet(okFetch({ ok: true, log: [] }));
+    expect(seen).toEqual([1]);
+  });
+});
+
+describe('auto sync', () => {
+  beforeEach(async () => {
+    await saveSettings(SETTINGS);
+    _tune({ debounceMs: 15 });
+  });
+  afterEach(() => _tune({}));
+  const stub = () => {
+    const f = okFetch();
+    vi.stubGlobal('fetch', f);
+    return f;
+  };
+  const settle = (ms = 80) => new Promise((r) => setTimeout(r, ms));
+
+  it('scheduleFlush does nothing before startAutoSync', async () => {
+    const f = stub();
+    await enqueue(mk('a'));
+    scheduleFlush();
+    await settle();
+    expect(f).not.toHaveBeenCalled();
+  });
+  it('after start: flushes on start, debounces bursts into one flush, flushes on online, hidden and pagehide (keepalive)', async () => {
+    const f = stub();
+    await enqueue(mk('a'));
+    startAutoSync();
+    startAutoSync(); // idempotent
+    await settle();
+    expect(f).toHaveBeenCalledTimes(1);
+    await enqueue(mk('b'));
+    scheduleFlush(); scheduleFlush(); scheduleFlush();
+    await settle();
+    expect(f).toHaveBeenCalledTimes(2);
+    await enqueue(mk('c'));
+    window.dispatchEvent(new Event('online'));
+    await settle();
+    expect(f).toHaveBeenCalledTimes(3);
+    await enqueue(mk('d'));
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    expect(f).toHaveBeenCalledTimes(4);
+    expect((f.mock.calls[3][1] as RequestInit).keepalive).toBe(true);
+    await enqueue(mk('e'));
+    window.dispatchEvent(new Event('pagehide'));
+    await settle();
+    expect(f).toHaveBeenCalledTimes(5);
+    expect((f.mock.calls[4][1] as RequestInit).keepalive).toBe(true);
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    await enqueue(mk('f'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    expect(f).toHaveBeenCalledTimes(6);
+  });
+  it('retries after a failure with backoff', async () => {
+    _tune({ debounceMs: 15, backoffBaseMs: 10 });
+    const f = vi.fn(async () => { throw new TypeError('offline'); });
+    vi.stubGlobal('fetch', f);
+    await enqueue(mk('a'));
+    startAutoSync();
+    await vi.waitFor(() => expect(f.mock.calls.length).toBeGreaterThanOrEqual(3), { timeout: 2000 });
   });
 });

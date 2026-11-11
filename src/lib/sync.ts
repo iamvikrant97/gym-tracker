@@ -1,6 +1,6 @@
 // Sync client: pushes the set queue to the Apps Script bridge and does the first import from the Sheet.
 // Queue entries are only removed after the bridge confirms them (ok:true), so a timeout or error never loses work.
-import { addCustomExercise, exerciseLookup, get, getAll, listExercises, loadSettings, openDb } from './db';
+import { addCustomExercise, exerciseLookup, get, getAll, listExercises, loadSettings, openDb, put } from './db';
 import type { QueueItem } from './db';
 import { TEMPLATES } from './seed';
 import type { Exercise, Muscle, SessionId, SetLog, Workout } from './types';
@@ -8,8 +8,20 @@ import type { Exercise, Muscle, SessionId, SetLog, Workout } from './types';
 export const BATCH_SIZE = 50;
 export const REQUEST_TIMEOUT_MS = 20_000;
 export const DEBOUNCE_MS = 2_000;
-const BACKOFF_BASE_MS = 5_000;
-const BACKOFF_MAX_MS = 5 * 60_000;
+export const BACKOFF_BASE_MS = 5_000;
+export const BACKOFF_MAX_MS = 5 * 60_000;
+/** After this many flushes in which the bridge skipped an entry, it stops blocking and is flagged "attention". */
+export const ATTENTION_AFTER = 5;
+
+const tuning = { requestMs: REQUEST_TIMEOUT_MS, debounceMs: DEBOUNCE_MS, backoffBaseMs: BACKOFF_BASE_MS };
+/** Test hook: shorten the timers. `_tune({})` restores the defaults. */
+export function _tune(t: Partial<typeof tuning>): void {
+  Object.assign(tuning, { requestMs: REQUEST_TIMEOUT_MS, debounceMs: DEBOUNCE_MS, backoffBaseMs: BACKOFF_BASE_MS }, t);
+}
+
+export function backoffMs(failureCount: number): number {
+  return Math.min(BACKOFF_BASE_MS * 2 ** (failureCount - 1), BACKOFF_MAX_MS);
+}
 
 /** Sheet day names (Log!B) per session. */
 export const DAY_NAMES: Record<SessionId | 'Other', string> = {
@@ -45,46 +57,100 @@ async function toSheetSet(s: SetLog): Promise<SheetSet> {
   };
 }
 
-let inFlight: Promise<{ sent: number; ok: boolean }> | null = null;
+
+// ---- attention bookkeeping (persisted so it survives a restart) --------------------------------
+
+type Attempts = Record<string, { n: number; updatedAt: number }>;
+async function loadAttempts(): Promise<Attempts> {
+  return ((await get<{ key: string; value: Attempts }>('settings', 'syncAttempts'))?.value ?? {}) as Attempts;
+}
+const saveAttempts = (v: Attempts) => put('settings', { key: 'syncAttempts', value: v });
+
+/** Queue entries the bridge keeps skipping. They stay queued and stay in the app; only the status shows them. */
+export async function attentionIds(): Promise<string[]> {
+  const attempts = await loadAttempts();
+  const out: string[] = [];
+  for (const q of await getAll<QueueItem>('queue')) {
+    const a = attempts[q.id];
+    if (!a || a.n < ATTENTION_AFTER) continue;
+    const set = await get<SetLog>('sets', q.id);
+    if (set && set.updatedAt === a.updatedAt) out.push(q.id);
+  }
+  return out;
+}
+
+// ---- flush -------------------------------------------------------------------------------------
+
+type FlushResult = { sent: number; ok: boolean };
+let inFlight: Promise<FlushResult> | null = null;
+let dirty = false;
 let failures = 0;
 
 /**
- * Sends queued set changes. POST text/plain JSON (no CORS preflight), redirect 'follow', batches of <= 50.
+ * Sends queued set changes. POST text/plain JSON (no CORS preflight), redirect 'follow', batches of <= 50, in
+ * date / doneAt / setNo order (the Sheet's Set#, Last time and PR formulas depend on row order).
  * Warm-up sets are never sent: the Sheet has no warm-up column and its formulas would count them as working
  * sets. If a set that was already sent becomes a warm-up, it is sent as a delete so its row clears.
+ * `keepalive` lets the request outlive a page that is being hidden or closed.
  */
-export function flush(fetchFn: typeof fetch = (...a) => fetch(...a)): Promise<{ sent: number; ok: boolean }> {
-  inFlight ??= doFlush(fetchFn).finally(() => {
+export function flush(fetchFn: typeof fetch = (...a) => fetch(...a), opts: { keepalive?: boolean } = {}): Promise<FlushResult> {
+  if (inFlight) {
+    dirty = true; // something may have been queued after this run read the queue: run once more
+    return inFlight;
+  }
+  const run = async (): Promise<FlushResult> => {
+    let r = await doFlush(fetchFn, opts);
+    while (dirty && r.ok) {
+      dirty = false;
+      const again = await doFlush(fetchFn, opts);
+      r = { sent: r.sent + again.sent, ok: again.ok };
+    }
+    return r;
+  };
+  inFlight = run().finally(() => {
     inFlight = null;
+    dirty = false;
   });
   return inFlight;
 }
 
-async function doFlush(fetchFn: typeof fetch): Promise<{ sent: number; ok: boolean }> {
+const sortKey = (s: SetLog) => [s.date, s.doneAt, s.setNo] as const;
+function bySheetOrder(a: SetLog | undefined, b: SetLog | undefined): number {
+  if (!a || !b) return a ? 1 : b ? -1 : 0; // orphans first (nothing to send)
+  const [ad, at, an] = sortKey(a);
+  const [bd, bt, bn] = sortKey(b);
+  return ad < bd ? -1 : ad > bd ? 1 : at - bt || an - bn;
+}
+
+async function doFlush(fetchFn: typeof fetch, opts: { keepalive?: boolean }): Promise<FlushResult> {
   const settings = await loadSettings();
   if (!settings.scriptUrl || !settings.scriptKey) return { sent: 0, ok: false };
   let sent = 0;
-  const held = new Set<string>(); // entries the bridge did not acknowledge: stay queued, retried by a later flush
+  const held = new Set<string>(); // not acknowledged this flush: stay queued, retried by a later flush
+  const skippedNow = new Set<string>();
+  const attempts = await loadAttempts();
+  const parked = new Set(await attentionIds()); // skipped too often: stay queued but do not block
   while (true) {
-    const batch = (await getAll<QueueItem>('queue')).filter((q) => !held.has(q.id)).slice(0, BATCH_SIZE);
+    const entries = (await getAll<QueueItem>('queue')).filter((q) => !held.has(q.id) && !parked.has(q.id));
+    const withSets = await Promise.all(entries.map(async (q) => ({ q, set: await get<SetLog>('sets', q.id) })));
+    withSets.sort((a, b) => bySheetOrder(a.set, b.set));
+    const batch = withSets.slice(0, BATCH_SIZE);
     if (batch.length === 0) break;
     const upserts: SheetSet[] = [];
     const deletes: string[] = [];
     const sentSets = new Map<string, number>(); // id -> updatedAt that was sent
-    const orphans: string[] = []; // queue entries whose set no longer exists: nothing to send
-    for (const q of batch) {
-      const set = await get<SetLog>('sets', q.id);
+    const acked = new Set<string>();
+    for (const { q, set } of batch) {
       if (!set) {
-        orphans.push(q.id);
+        acked.add(q.id); // nothing to send; the queue entry is dropped
         continue;
       }
       sentSets.set(set.id, set.updatedAt);
       if (q.op === 'delete' || set.deleted || set.warmup) deletes.push(q.id);
       else upserts.push(await toSheetSet(set));
     }
-    let acked = new Set<string>(orphans);
     if (upserts.length || deletes.length) {
-      const data = await post(fetchFn, settings.scriptUrl, { key: settings.scriptKey, upserts, deletes });
+      const data = await post(fetchFn, settings.scriptUrl, { key: settings.scriptKey, upserts, deletes }, opts.keepalive);
       if (!data) {
         failures++;
         scheduleRetry();
@@ -93,13 +159,27 @@ async function doFlush(fetchFn: typeof fetch): Promise<{ sent: number; ok: boole
       // Only ids the bridge lists as written (acked) or cleared (deleted) count; anything else is kept.
       for (const id of data.acked ?? []) acked.add(String(id));
       for (const id of data.deleted ?? []) acked.add(String(id));
+      for (const id of data.skipped ?? []) skippedNow.add(String(id));
     }
-    const done = batch.filter((q) => acked.has(q.id));
-    for (const q of batch) if (!acked.has(q.id)) held.add(q.id);
+    const queueEntries = batch.map((b) => b.q);
+    const done = queueEntries.filter((q) => acked.has(q.id));
+    for (const q of queueEntries) if (!acked.has(q.id)) held.add(q.id);
     await confirm(done, sentSets);
     sent += done.length;
   }
-  if (held.size > 0) {
+  // Count skips (per set version) so an entry the bridge never accepts eventually stops blocking.
+  let changed = false;
+  for (const id of held) {
+    if (!skippedNow.has(id)) continue;
+    const set = await get<SetLog>('sets', id);
+    const prev = attempts[id];
+    attempts[id] = { n: (prev && prev.updatedAt === set?.updatedAt ? prev.n : 0) + 1, updatedAt: set?.updatedAt ?? 0 };
+    changed = true;
+  }
+  for (const id of Object.keys(attempts)) if (!held.has(id) && !parked.has(id)) { delete attempts[id]; changed = true; }
+  if (changed) await saveAttempts(attempts);
+  const stillBlocking = [...held].some((id) => !(attempts[id] && attempts[id].n >= ATTENTION_AFTER));
+  if (stillBlocking) {
     failures++;
     scheduleRetry();
     return { sent, ok: false };
@@ -110,9 +190,9 @@ async function doFlush(fetchFn: typeof fetch): Promise<{ sent: number; ok: boole
 
 interface BridgeReply { ok?: boolean; acked?: string[]; skipped?: string[]; deleted?: string[] }
 
-async function post(fetchFn: typeof fetch, url: string, body: unknown): Promise<BridgeReply | null> {
+async function post(fetchFn: typeof fetch, url: string, body: unknown, keepalive?: boolean): Promise<BridgeReply | null> {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
-  const timer = ctrl ? setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS) : undefined;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), tuning.requestMs) : undefined;
   try {
     const res = await fetchFn(url, {
       method: 'POST',
@@ -120,6 +200,7 @@ async function post(fetchFn: typeof fetch, url: string, body: unknown): Promise<
       body: JSON.stringify(body),
       redirect: 'follow',
       signal: ctrl?.signal,
+      ...(keepalive ? { keepalive: true } : {}),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as BridgeReply;
@@ -150,11 +231,14 @@ async function confirm(batch: QueueItem[], sentSets: Map<string, number>): Promi
   await tx.done;
 }
 
-export async function syncStatus(): Promise<'synced' | 'pending' | 'offline' | 'not-set-up'> {
+export async function syncStatus(): Promise<'synced' | 'pending' | 'offline' | 'attention' | 'not-set-up'> {
   const s = await loadSettings();
   if (!s.scriptUrl || !s.scriptKey) return 'not-set-up';
-  const pending = (await getAll<QueueItem>('queue')).length;
-  if (pending === 0) return 'synced';
+  const queued = await getAll<QueueItem>('queue');
+  if (queued.length === 0) return 'synced';
+  const parked = new Set(await attentionIds());
+  const blocking = queued.filter((q) => !parked.has(q.id)).length;
+  if (blocking === 0) return 'attention';
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'offline';
   return 'pending';
 }
@@ -182,11 +266,21 @@ const parseDate = (d: string) => {
   return new Date(y, m - 1, day, 12, 0, 0).getTime();
 };
 
-/** Pulls the Log from the Sheet into an empty app. Does nothing when any set already exists. */
+type ImportInfo = { imported: number; customExercises: Exercise[] };
+const importListeners = new Set<(info: ImportInfo) => void>();
+/** Called after an import added sets, with the full custom-exercise list (so caches can refresh). Returns unsubscribe. */
+export function onImported(cb: (info: ImportInfo) => void): () => void {
+  importListeners.add(cb);
+  return () => importListeners.delete(cb);
+}
+
+/**
+ * Pulls the Log from the Sheet and merges it by set id: rows whose id the app already has (including deleted
+ * ones) are skipped, so it is safe to run any time and any number of times.
+ */
 export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(...a)): Promise<{ imported: number }> {
   const settings = await loadSettings();
   if (!settings.scriptUrl || !settings.scriptKey) return { imported: 0 };
-  if ((await getAll<SetLog>('sets')).length > 0) return { imported: 0 };
 
   let data: { ok?: boolean; log?: LogRow[]; exercises?: LibRow[] };
   try {
@@ -198,9 +292,15 @@ export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(..
     return { imported: 0 };
   }
   if (data?.ok === false || !Array.isArray(data?.log)) return { imported: 0 };
-  const rows = data.log.filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) && Number.isFinite(Number(r.reps)) && String(r.exercise ?? '').trim());
 
-  // name -> exercise, creating custom ones for names the app does not know.
+  const idOf = (r: LogRow) => (r.id ? String(r.id) : '');
+  const haveIds = new Set((await getAll<SetLog>('sets')).map((x) => x.id));
+  const rows = data.log.filter(
+    (r) => r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) && Number.isFinite(Number(r.reps)) && String(r.exercise ?? '').trim() && !haveIds.has(idOf(r)),
+  );
+  if (rows.length === 0) return { imported: 0 };
+
+  // name -> exercise, creating custom ones only for rows that will be imported.
   const known = new Map((await listExercises()).map((e) => [norm(e.name), e]));
   const lib = new Map((data.exercises ?? []).map((e) => [norm(e.name), e]));
   const resolve = async (name: string): Promise<Exercise> => {
@@ -225,35 +325,43 @@ export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(..
     groups.get(key)!.rows.push({ ...r, ex });
   }
 
-  const workouts: Workout[] = [];
-  const sets: SetLog[] = [];
+  const db = await openDb();
+  const tx = db.transaction(['sets', 'workouts'], 'readwrite');
+  const setsStore = tx.objectStore('sets');
+  const workoutsStore = tx.objectStore('workouts');
+  const existingIds = new Set(((await setsStore.getAllKeys()) as string[]).map(String)); // re-checked inside the transaction
+  const existingWorkouts = (await workoutsStore.getAll()) as Workout[];
+  let imported = 0;
   for (const g of groups.values()) {
     const sessionId = sessionFromDay(g.day, g.rows.map((r) => r.ex.id));
-    const startedAt = parseDate(g.date);
-    const workoutId = `import-${g.date}-${sessionId}`;
-    workouts.push({ id: workoutId, date: g.date, sessionId, startedAt, endedAt: startedAt + g.rows.length * 60_000, swaps: {} });
+    // Join the app's own workout of that day and session if there is one, else a deterministic import workout.
+    const own = existingWorkouts.find((w) => w.date === g.date && w.sessionId === sessionId);
+    const startedAt = own?.startedAt ?? parseDate(g.date);
+    const workoutId = own?.id ?? `import-${g.date}-${sessionId}`;
+    if (!own) workoutsStore.put({ id: workoutId, date: g.date, sessionId, startedAt, endedAt: startedAt + g.rows.length * 60_000, swaps: {} } satisfies Workout);
     const counts = new Map<string, number>();
     g.rows.forEach((r, i) => {
       const setNo = (counts.get(r.ex.id) ?? 0) + 1;
       counts.set(r.ex.id, setNo);
+      const id = idOf(r) || `import-${g.date}-${sessionId}-${r.ex.id}-${setNo}`;
+      if (existingIds.has(id)) return;
+      existingIds.add(id);
       const doneAt = startedAt + (i + 1) * 60_000;
-      sets.push({
-        id: r.id ? String(r.id) : `import-${g.date}-${sessionId}-${r.ex.id}-${setNo}`,
-        workoutId, date: g.date, sessionId, exerciseId: r.ex.id, setNo,
+      setsStore.put({
+        id, workoutId, date: g.date, sessionId, exerciseId: r.ex.id, setNo,
         kg: Number(r.kg) || 0, reps: Number(r.reps), warmup: false, feltIt: false,
         ...(r.note ? { note: String(r.note) } : {}),
         doneAt, updatedAt: doneAt, deleted: false, synced: true,
-      });
+      } satisfies SetLog);
+      imported++;
     });
   }
-
-  const db = await openDb();
-  const tx = db.transaction(['sets', 'workouts'], 'readwrite');
-  if ((await tx.objectStore('sets').count()) > 0) { await tx.done; return { imported: 0 }; }
-  for (const w of workouts) tx.objectStore('workouts').put(w);
-  for (const s of sets) tx.objectStore('sets').put(s);
   await tx.done;
-  return { imported: sets.length };
+  if (imported > 0) {
+    const info = { imported, customExercises: await getAll<Exercise>('customExercises') };
+    for (const cb of importListeners) cb(info);
+  }
+  return { imported };
 }
 
 // ---- auto sync -------------------------------------------------------------------------------
@@ -265,23 +373,26 @@ let retry: ReturnType<typeof setTimeout> | undefined;
 function scheduleRetry() {
   if (!started) return;
   clearTimeout(retry);
-  const delay = Math.min(BACKOFF_BASE_MS * 2 ** (failures - 1), BACKOFF_MAX_MS);
+  const delay = Math.min(tuning.backoffBaseMs * 2 ** (failures - 1), BACKOFF_MAX_MS);
   retry = setTimeout(() => void flush(), delay);
 }
 
-/** Call after a queue write. No-op until startAutoSync() has run. Debounced by 2 s. */
+/** Call after a queue write. No-op until startAutoSync() has run. Debounced (2 s). */
 export function scheduleFlush(): void {
   if (!started) return;
   clearTimeout(debounce);
-  debounce = setTimeout(() => void flush(), DEBOUNCE_MS);
+  debounce = setTimeout(() => void flush(), tuning.debounceMs);
 }
 
 export function startAutoSync(): void {
   if (started || typeof window === 'undefined') return;
   started = true;
   window.addEventListener('online', () => void flush());
+  // Leaving the page (switching to Spotify, closing the tab): send what is queued now, with keepalive.
+  window.addEventListener('pagehide', () => void flush(undefined, { keepalive: true }));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void flush();
+    else void flush(undefined, { keepalive: true });
   });
   void flush();
   try {
@@ -298,6 +409,7 @@ export function _resetSyncState(): void {
   started = false;
   failures = 0;
   inFlight = null;
+  dirty = false;
   clearTimeout(debounce);
   clearTimeout(retry);
 }
