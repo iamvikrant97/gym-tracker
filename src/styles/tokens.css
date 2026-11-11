@@ -1,0 +1,18 @@
+:root {
+  --ground: #0b0d11;
+  --surface: #13161c;
+  --raised: #1a1e26;
+  --line: #242934;
+  --text: #e8eaee;
+  --muted: #8c94a3;
+  --blue: #4c8dff;
+  --blue-deep: #16305c;
+  --blue-ink: #dce7ff;
+  --amber: #f2b544;
+  --green: #1ed760;
+  --display: 'Red Hat Display', system-ui, sans-serif;
+  --body: 'Albert Sans Variable', 'Albert Sans', system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  color-scheme: dark;
+}
