@@ -7,6 +7,7 @@
   import Progress from './screens/Progress.svelte';
   import Week from './screens/Week.svelte';
   import Nav from './ui/Nav.svelte';
+  import SpotifyBar from './ui/SpotifyBar.svelte';
   import Toast from './ui/Toast.svelte';
   import { toasts, clearToast } from './ui/toast.svelte';
 
@@ -46,6 +47,7 @@
 {#if showNav}
   <!-- Dock stack, bottom up: nav, then (later tasks) the Spotify bar and rest timer above it. -->
   <div class="dock">
+    {#if route === 'home' || route === 'workout'}<SpotifyBar />{/if}
     <Nav {route} workoutActive={workout.active} />
   </div>
 {/if}
