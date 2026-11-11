@@ -220,14 +220,16 @@ function changedSpan(before, after, cols) {
 // ==== END CORE ====
 
 // ---------------------------------------------------------------------------------------------
-// Entry points. Deploy: Extensions > Apps Script in the Sheet, paste this file, run setup() once
-// (copy the key from the log into the app's Settings), then Deploy > New deployment > Web app
+// Entry points. Deploy (SETUP.md step 2): Extensions > Apps Script in the Sheet, paste this file, then
+// Project Settings > Script properties > add KEY = a secret you make up (type the same key in the app's
+// Settings), then Deploy > New deployment > Web app
 // with "Execute as: Me" and "Who has access: Anyone" (not "Anyone with Google account": fetch cannot sign in). The key lives only in Script Properties, never in the repo.
 // ---------------------------------------------------------------------------------------------
 const LOG_SHEET = 'Log';
 const EX_SHEET = 'Exercises';
 const FORMULA_ROW = 1004; // last preformatted Log row; copied down when the sheet is full
 
+/** Not needed if you added the KEY script property by hand (SETUP.md). Optional: makes a random KEY and logs it. */
 function setup() {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('KEY')) { Logger.log('KEY already set (delete it in Project Settings to rotate).'); return; }

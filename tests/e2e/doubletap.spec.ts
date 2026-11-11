@@ -19,3 +19,20 @@ for (const gap of [120, 250]) {
     await expect(chk).toHaveAttribute('aria-pressed', 'true');
   });
 }
+
+test('mid-workout, scrolled to the bottom, Finish workout is not covered by the dock', async ({ page }) => {
+  await mockBridge(page);
+  await openSeeded(page);
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.locator('article[aria-label="Converging chest press"]').getByRole('button', { name: 'Complete set 1' }).click();
+  await expect(page.getByTestId('rest-dock')).toHaveClass(/open/);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(500);
+  const finish = await page.getByRole('button', { name: 'Finish workout' }).boundingBox();
+  const dock = await page.getByTestId('rest-dock').boundingBox();
+  expect(finish && dock && finish.y + finish.height <= dock.y).toBe(true);
+  await page.screenshot({ path: '.superpowers/sdd/2026-11-11-gym-app/shots/workout-bottom.png' });
+  // A real click: fails if the dock covers it.
+  await page.getByRole('button', { name: 'Finish workout' }).click();
+  await expect(page).toHaveURL(/#\/summary$/);
+});

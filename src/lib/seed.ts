@@ -60,7 +60,8 @@ const LIB: Row[] = [
   ['Triceps', 'Single-arm rope extension', 'Triceps', 'Cable', 'i', 10, 12, { perArm: true }],
 ];
 
-const defaultStep = (eq: Equip) => (eq === 'Machine' || eq === 'Cable' ? 5 : 2.5);
+// 2.5 kg everywhere (machines and cable stacks at Vik's gym step 10 -> 12.5); per-exercise override in Settings.
+const defaultStep = (_eq: Equip) => 2.5;
 
 export const EXERCISES: Exercise[] = LIB.map(([slot, name, muscle, eq, k, repMin, repMax, extra]) => {
   const kind = k === 'c' ? 'compound' : 'isolation';

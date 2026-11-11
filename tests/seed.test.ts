@@ -40,7 +40,9 @@ describe('seed', () => {
   });
   it('steps', () => {
     expect(exerciseById('cable-lateral-raise')!.step).toBe(1);
-    expect(exerciseById('converging-chest-press')!.step).toBe(5);
+    // Vik's machines load in 2.5 kg steps (10 -> 12.5); 5 kg jumps were too coarse (final review M5).
+    for (const id of ['converging-chest-press', 'seated-machine-row', 'lat-pulldown-wide', 'neutral-grip-pulldown', 'leg-press', 'leg-extension', 'seated-leg-curl', 'cable-row-v-handle', 'bar-pushdown'])
+      expect(exerciseById(id)!.step).toBe(2.5);
     expect(exerciseById('smith-incline-press')!.step).toBe(2.5);
     expect(exerciseById('db-incline-press')!.step).toBe(2.5);
   });

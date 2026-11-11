@@ -11,7 +11,7 @@ Nothing secret is stored in the code. Your Sheet link, your key and your Spotify
 The first time the app connects, it changes your Sheet a little:
 
 - on rows where you left the date, day or exercise blank (because the row above already had it), it fills those cells in, and
-- it adds a hidden id to every logged row (column AB), so the app can find the row again later.
+- it adds an id to every logged row in column AB and hides that column, so the app can find the row again later.
 
 Your numbers and formulas are not changed, but make a copy before you start, just in case:
 
@@ -29,10 +29,10 @@ Keep using the original. The copy is only there if something goes wrong.
 2. Click **+** (top right) → **New repository**.
 3. Repository name: `gym-tracker` (exactly this, all lowercase).
 4. Choose **Public**, then click **Create repository**.
-5. Upload the app files to it. (If someone is helping you, they can push the code for you. The site is built from the `main` branch.)
+5. Put the app code on the `main` branch with git (`git push origin build:main`), not with the "Upload files" button: the web upload easily leaves out the hidden `.github` folder, and then nothing gets built. If someone is helping you, they can push it for you.
 6. In the repository, click **Settings** → **Pages** (left side).
 7. Under **Build and deployment → Source**, choose **GitHub Actions**.
-8. Click the **Actions** tab and wait for the green tick (about 2 minutes).
+8. Click the **Actions** tab and wait for the green tick (about 2 minutes). If there is no run, click **Deploy** (left) → **Run workflow**.
 9. Your app is now at `https://<your-github-username>.github.io/gym-tracker/`. Write this address down.
 
 ---
@@ -43,7 +43,7 @@ Keep using the original. The copy is only there if something goes wrong.
 2. Click **Extensions → Apps Script**. A new tab opens.
 3. Delete everything in the editor, then paste the whole content of the file `apps-script/Code.gs`.
 4. Click the **Save** icon (floppy disk).
-5. Make up a key: any long password you like, for example `squat-rack-blue-4417-mango`. Write it down.
+5. Make up a key: any long password you like, for example `squat-rack-blue-4417-mango`. Write it down. (You do not need to run anything in the script: the key is set only in the next step.)
 6. On the left, click the **gear icon (Project Settings)**.
 7. Scroll down to **Script properties** → **Add script property**.
    - Property: `KEY` (capital letters, exactly this)
@@ -87,6 +87,7 @@ The app's own Settings screen also shows the exact Redirect URI to paste, with a
 2. Go to `https://<your-github-username>.github.io/gym-tracker/`.
 3. Tap the **⋮** menu (top right) → **Install app** (on some phones it says **Add to Home screen**) → **Install**.
 4. Open **Gym** from your home screen from now on.
+5. **Open it once while you have internet, before you go to the gym.** The first open saves the app on the phone; after that it works with no signal. After every update, open it once online too.
 
 ---
 
@@ -102,6 +103,7 @@ The app's own Settings screen also shows the exact Redirect URI to paste, with a
    - paste the **Client ID** from step 3,
    - tap **Connect Spotify**, log in and tap **Agree**. You come back to the app.
 4. **Training:** check "Sessions per week" (6 = Monday to Saturday) and your body weight.
+5. **Exercises:** weight steps are 2.5 kg by default. If a machine moves in 5 kg, change its step here.
 
 Done. Log a set, and within a few seconds it appears in the Sheet. The dot on the Today screen shows "Synced" with the time.
 
@@ -115,6 +117,8 @@ Done. Log a set, and within a few seconds it appears in the Sheet. The dot on th
 | "This is the test URL…" or "should end in /exec" | You copied the wrong URL. Use **Deploy → Manage deployments** and copy the Web app URL ending in `/exec`. |
 | "That URL did not answer like the script" | "Who has access" is not **Anyone**. Fix it in **Deploy → Manage deployments → edit**, choose **New version**, Deploy. |
 | "Could not reach the script" | No internet. Your sets are safe on the phone and are sent later by themselves. |
+| "The Sheet is taking long…" (first import) | The script is still working. Wait a minute and tap **Try again**. Nothing is duplicated. |
+| The workout says it closed after an hour without a set | Tap **Continue workout** (or just log the next set): the same workout carries on, for up to 3 hours, the same day. |
 | Today shows "Offline · saved on phone" | Same: no internet. Nothing is lost. |
 | Today shows "Sheet needs a look" | The Sheet refused some sets several times. Open Settings to see how many. Check that the **Log** and **Exercises** tabs still have their original names. |
 | Spotify says "Open Spotify" | Spotify is not playing on any device. Open the Spotify app, start any song, then come back. |
@@ -129,6 +133,7 @@ Your data lives on the phone first, and in the Sheet. Clearing Chrome's data for
 
 ## Known limits
 
+- **A workout closes by itself after 60 minutes without a set** if you forget Finish. The same day, within 3 hours, logging another set or tapping Continue workout reopens it.
 - **No alerts when the app is closed.** The rest timer vibrates only while the app is open. If you switch to another app, the timer keeps the right time and shows it when you come back.
 - **Spotify needs internet and an active device.** The phone must be online, and Spotify must be open (or recently playing) on some device. Playback control needs Premium.
 - **Suggested playlists are community playlists.** Spotify does not let new apps see its own editorial playlists, so "For your workout" shows popular user-made gym playlists. Pin the ones you like.
