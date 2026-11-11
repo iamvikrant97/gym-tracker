@@ -64,6 +64,8 @@ export interface Workout {
    * Ignored once another set is done, so the next rest starts from the exercise default again.
    */
   rest?: { after: number; endsAt: number | null };
+  /** Closed by the idle rule (not by Finish): it can be continued the same day. */
+  autoEnded?: true;
 }
 
 export interface Settings {

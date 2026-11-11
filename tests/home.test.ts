@@ -155,6 +155,19 @@ describe('Home', () => {
     expect(screen.getByText(/sessions done this week/).closest('p')?.textContent).toContain('4 of 6');
   });
 
+  it('offers Continue workout for a workout the idle rule closed earlier today', async () => {
+    await seedHistory();
+    const w = await workout.startWorkout('CB-B', at(12, 7));
+    await workout.completeSet('converging-chest-press', 1, 40, 10, at(12, 7) + 60_000);
+    await workout.checkAutoEnd(at(12, 8) + 5 * 60_000); // 8:05 -> closed at 8:01
+    expect(workout.active).toBe(false);
+    render(Home);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Continue workout' }));
+    await waitFor(() => expect(location.hash).toBe('#/workout'));
+    expect(workout.active).toBe(true);
+    expect(workout.current?.id).toBe(w.id);
+  });
+
   it('settings gear opens #/settings', async () => {
     render(Home);
     await fireEvent.click(screen.getByRole('button', { name: 'Settings' }));

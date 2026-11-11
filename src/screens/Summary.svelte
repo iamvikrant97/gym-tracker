@@ -11,7 +11,7 @@
 
   let { bodyKg }: { bodyKg?: number } = $props();
 
-  // Other workouts of the same visit (a break > 15 min splits one gym visit into two workouts).
+  // Other workouts of the same visit (a very long break can split one gym visit into two workouts).
   let workouts = $state.raw<Workout[]>([]);
   $effect(() => {
     void workout.current?.id;
@@ -33,6 +33,14 @@
     const d = new Date(w.startedAt);
     return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
   });
+  async function continueWorkout() {
+    try {
+      await workout.resume();
+      location.hash = '#/workout';
+    } catch {
+      /* no longer continuable: stay on the summary */
+    }
+  }
   const num = (n: number) => Math.round(n).toLocaleString('en-IN');
 </script>
 
@@ -70,6 +78,9 @@
       <p>Don't add this to MyFitnessPal — your 2,650 kcal target already includes training.</p>
     </div>
 
+    {#if workout.canResume()}
+      <button class="more press" type="button" onclick={continueWorkout}>Continue workout</button>
+    {/if}
     <button class="done press" type="button" onclick={() => (location.hash = '#/')}>Done</button>
   {/if}
 </section>
@@ -90,5 +101,7 @@
   .badge { font: 600 11px/1 var(--body); color: #1a1406; background: var(--amber); border-radius: 4px; padding: 3px 5px; margin-right: 8px; }
   .kcal .big { font: 700 26px/1 var(--display); font-variant-numeric: tabular-nums; }
   .kcal p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+  .more { display: block; width: 100%; height: 52px; margin-top: 20px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); font-weight: 600; font-size: 15px; }
+  .more + .done { margin-top: 10px; }
   .done { display: block; width: 100%; height: 56px; margin-top: 20px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; }
 </style>

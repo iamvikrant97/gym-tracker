@@ -7,7 +7,10 @@ import { isPR, lastSessionSets, targetFor } from './progression';
 import { exerciseById, rangeFor, TEMPLATES } from './seed';
 import type { Exercise, SessionId, SetLog, Settings, Workout } from './types';
 
-export const AUTO_END_MS = 15 * 60_000;
+/** An open workout with no set for this long is closed (Finish forgotten). Rests are at most 5 min; calls and queues happen. */
+export const AUTO_END_MS = 60 * 60_000;
+/** An auto-ended workout can be continued for this long after it ended, on the same date. */
+export const RESUME_WINDOW_MS = 3 * 60 * 60_000;
 export const UNDO_MS = 5_000;
 export const MAX_REST_SEC = 300;
 const DEFAULT_REST_SEC = 120;
@@ -121,8 +124,10 @@ export class WorkoutStore {
     });
   }
 
-  async #endWorkout(w: Workout, endedAt: number): Promise<Workout> {
-    const ended = { ...w, endedAt };
+  async #endWorkout(w: Workout, endedAt: number, auto = false): Promise<Workout> {
+    const ended: Workout = { ...w, endedAt };
+    if (auto) ended.autoEnded = true;
+    else delete ended.autoEnded;
     await put('workouts', ended);
     return ended;
   }
@@ -138,7 +143,7 @@ export class WorkoutStore {
   async #begin(sessionId: SessionId, now: number, swaps: Record<string, string> = {}): Promise<Workout> {
     for (const w of (await getAll<Workout>('workouts')).filter((x) => x.endedAt === undefined)) {
       const sets = await getAllFromIndex<SetLog>('sets', 'workoutId', w.id);
-      await this.#endWorkout(w, Math.min(now, WorkoutStore.lastActivity(w, sets) + AUTO_END_MS));
+      await this.#endWorkout(w, Math.min(now, WorkoutStore.lastActivity(w, sets) + AUTO_END_MS), true);
     }
     const w: Workout = { id: crypto.randomUUID(), date: localDate(now), sessionId, startedAt: now, swaps: { ...swaps } };
     await put('workouts', w);
@@ -161,6 +166,8 @@ export class WorkoutStore {
   /** Same session and swaps as the most recent workout. */
   repeatLast(now: number = Date.now()): Promise<Workout> {
     return this.#run(async () => {
+      // Never close a running workout from Settings: that would split it.
+      if (this.active) throw new Error('Finish the open workout first');
       const all = (await getAll<Workout>('workouts')).sort((a, b) => b.startedAt - a.startedAt);
       const last = all[0];
       if (!last) throw new Error('No workout to repeat yet');
@@ -211,7 +218,7 @@ export class WorkoutStore {
 
   /**
    * Ends the current workout if its last activity (last done set, or the start if none) was more than
-   * 15 min before `now`: endedAt = last activity + 15 min. Call on a timer and on visibilitychange.
+   * 60 min before `now`: endedAt = last activity + 60 min, marked autoEnded so it can be continued. Call on a timer and on visibilitychange.
    * Resolves true if it ended the workout.
    */
   checkAutoEnd(now: number = Date.now()): Promise<boolean> {
@@ -223,9 +230,37 @@ export class WorkoutStore {
     if (!w || w.endedAt !== undefined) return false;
     const last = WorkoutStore.lastActivity(w, this.sets);
     if (now - last <= AUTO_END_MS) return false;
-    this.current = await this.#endWorkout(w, Math.min(now, last + AUTO_END_MS));
+    this.current = await this.#endWorkout(w, Math.min(now, last + AUTO_END_MS), true);
     this.restEndsAt = null;
     return true;
+  }
+
+  static #continuable(w: Workout | null, now: number): boolean {
+    return !!w && w.endedAt !== undefined && !!w.autoEnded && now - w.endedAt < RESUME_WINDOW_MS && localDate(now) === w.date;
+  }
+
+  /** True when the current workout was closed by the idle rule today, less than 3 h ago: offer "Continue workout". */
+  canResume(now: number = Date.now()): boolean {
+    return WorkoutStore.#continuable(this.current, now);
+  }
+
+  async #reopen(w: Workout): Promise<Workout> {
+    const open: Workout = { ...w };
+    delete open.endedAt;
+    delete open.autoEnded;
+    await put('workouts', open);
+    this.current = open;
+    this.#recomputeRest();
+    return open;
+  }
+
+  /** Reopens an auto-ended workout (same id, date and sets). Throws if it cannot be continued. */
+  resume(now: number = Date.now()): Promise<Workout> {
+    return this.#run(async () => {
+      const w = this.current;
+      if (!w || !WorkoutStore.#continuable(w, now)) throw new Error('This workout cannot be continued');
+      return this.#reopen(w);
+    });
   }
 
   /** Loads the open workout (if any) with its done sets and rest timer; auto-ends it if stale. */
@@ -245,8 +280,8 @@ export class WorkoutStore {
           keep = w;
           keepSets = sets;
         } else {
-          // Stale (or a second open one): ended 15 min after its last done set, never in the future.
-          const ended = await this.#endWorkout(w, Math.min(now, last + AUTO_END_MS));
+          // Stale (or a second open one): ended 60 min after its last done set, never in the future.
+          const ended = await this.#endWorkout(w, Math.min(now, last + AUTO_END_MS), true);
           latestEnded ??= { w: ended, sets };
         }
       }
@@ -319,10 +354,15 @@ export class WorkoutStore {
   completeSet(exerciseId: string, setNo: number, kg: number, reps: number, now: number = Date.now()): Promise<{ set: SetLog; pr: boolean }> {
     return this.#run(async () => {
       let w = this.current;
-      if (!w || w.endedAt !== undefined) throw new Error('No workout in progress');
-      // A long break ends the old workout at last set + 15 min; this set then opens a fresh one of the same session.
-      if (this.sets.length > 0 && (await this.#checkAutoEnd(now))) {
-        w = await this.#begin(w.sessionId, now, w.swaps);
+      if (!w) throw new Error('No workout in progress');
+      // Idle too long (whether or not the timer already closed it): continue the same workout if it ended
+      // less than 3 h ago today; otherwise this set opens a fresh workout of the same session (same visit).
+      if (w.endedAt === undefined) await this.#checkAutoEnd(now);
+      w = this.current!;
+      if (w.endedAt !== undefined) {
+        if (WorkoutStore.#continuable(w, now)) w = await this.#reopen(w);
+        else if (w.autoEnded) w = await this.#begin(w.sessionId, now, w.swaps);
+        else throw new Error('This workout is finished');
       }
       const existing = this.sets.find((s) => s.exerciseId === exerciseId && s.setNo === setNo && !s.warmup);
       // Logging a set number that is already done is an edit of that set: same id, same doneAt.

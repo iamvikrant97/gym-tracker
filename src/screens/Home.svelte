@@ -65,19 +65,22 @@
   });
 
   const resuming = $derived(workout.active);
+  // Closed by the idle rule earlier today (a call, a queue for the bench): offer to carry on with it.
+  const continuing = $derived(!resuming && picked === null && !!workout.current && workout.canResume(now));
+  const following = $derived(resuming || continuing);
   // A workout with no sets (discarded, or opened by mistake and closed) does not move the rotation on.
   const counted = $derived.by(() => {
     const withSets = new Set(sets.filter((x) => !x.warmup).map((x) => x.workoutId));
     return workouts.filter((w) => withSets.has(w.id) || w.id === workout.current?.id);
   });
   const sessionId = $derived<SessionId>(
-    resuming ? workout.current!.sessionId : (picked ?? nextSession(counted, TEMPLATES)),
+    following ? workout.current!.sessionId : (picked ?? nextSession(counted, TEMPLATES)),
   );
   const resumingEmpty = $derived(resuming && workout.sets.length === 0);
   const template = $derived(TEMPLATES.find((t) => t.id === sessionId)!);
 
   const effectiveId = (t: SessionTemplate, templateId: string) =>
-    (resuming ? workout.current?.swaps[templateId] : undefined) ?? settings.templateOverrides[t.id]?.[templateId] ?? templateId;
+    (following ? workout.current?.swaps[templateId] : undefined) ?? settings.templateOverrides[t.id]?.[templateId] ?? templateId;
 
   function describe(t: SessionTemplate) {
     let setCount = 0;
@@ -97,7 +100,7 @@
   // Visits (date + session), so a long break that split one visit into two workouts still counts once.
   const visits = $derived(visitKeysInWeek(workouts, sets, today));
   const sessionNo = $derived(
-    Math.max(1, resuming && visits.has(visitKey(workout.current!)) ? visits.size : visits.size + 1),
+    Math.max(1, following && visits.has(visitKey(workout.current!)) ? visits.size : visits.size + 1),
   );
   const notes = $derived(homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)));
 
@@ -113,7 +116,8 @@
     if (starting || !workout.ready) return;
     starting = true;
     try {
-      if (!workout.active) await workout.startWorkout(sessionId);
+      if (continuing) await workout.resume();
+      else if (!workout.active) await workout.startWorkout(sessionId);
       location.hash = '#/workout';
     } catch (e) {
       showToast(e instanceof Error ? `Could not start: ${e.message}` : 'Could not start the workout');
@@ -161,7 +165,7 @@
         <li><b>{i + 1}</b><span>{item.name}</span><span>{item.sets} sets</span></li>
       {/each}
     </ol>
-    <button class="start btn-primary press" type="button" disabled={!workout.ready || starting} onclick={start}>{resuming ? 'Resume workout' : 'Start workout'}</button>
+    <button class="start btn-primary press" type="button" disabled={!workout.ready || starting} onclick={start}>{resuming ? 'Resume workout' : continuing ? 'Continue workout' : 'Start workout'}</button>
     {#if !resuming}
       <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Swap day</button>
     {:else if resumingEmpty}

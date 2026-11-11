@@ -31,13 +31,75 @@ describe('defaults', () => {
   });
 });
 
-describe('a break > 15 min is still one visit', () => {
+describe('auto-end never blocks logging (I2)', () => {
+  it('set, 20 min gap with the timer firing, set: both saved in one workout', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', at(11, 7));
+    await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 3));
+    expect(await s.checkAutoEnd(at(11, 7, 20))).toBe(false);
+    const { set } = await s.completeSet(FIRST, 2, 40, 10, at(11, 7, 23));
+    expect(set.workoutId).toBe(w.id);
+    expect(await getAll<Workout>('workouts')).toHaveLength(1);
+    expect(s.active).toBe(true);
+  });
+
+  it('set, 61 min gap (timer auto-ends), set: no error, the same workout continues', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', at(11, 7));
+    await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 3));
+    expect(await s.checkAutoEnd(at(11, 8, 5))).toBe(true);
+    expect(s.current?.autoEnded).toBe(true);
+    expect(s.canResume(at(11, 8, 5))).toBe(true);
+    const { set } = await s.completeSet(FIRST, 2, 40, 10, at(11, 8, 6));
+    expect(set.workoutId).toBe(w.id);
+    expect(s.active).toBe(true);
+    const all = await getAll<Workout>('workouts');
+    expect(all).toHaveLength(1);
+    expect(all[0].endedAt).toBeUndefined();
+    expect(s.sets).toHaveLength(2);
+  });
+
+  it('a 16-min warm-up before the first set does not end the workout', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', at(11, 7));
+    expect(await s.checkAutoEnd(at(11, 7, 16))).toBe(false);
+    const { set } = await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 17));
+    expect(set.workoutId).toBe(w.id);
+  });
+
+  it('resume() reopens an auto-ended workout of today; not a finished one, not tomorrow', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', at(11, 7));
+    await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 3));
+    await s.checkAutoEnd(at(11, 8, 30));
+    expect(s.canResume(at(12, 7))).toBe(false);
+    await s.resume(at(11, 9));
+    expect(s.active).toBe(true);
+    await s.finish(at(11, 9, 30));
+    expect(s.canResume(at(11, 9, 31))).toBe(false);
+    await expect(s.resume(at(11, 9, 31))).rejects.toThrow();
+  });
+
+  it('after a restart the auto-ended workout can still be continued', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', at(11, 7));
+    await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 3));
+    const fresh = new WorkoutStore();
+    await fresh.restore(at(11, 8, 30));
+    expect(fresh.active).toBe(false);
+    expect(fresh.canResume(at(11, 8, 30))).toBe(true);
+    const { set } = await fresh.completeSet(FIRST, 2, 40, 10, at(11, 8, 31));
+    expect(set.workoutId).toBe(w.id);
+  });
+});
+
+describe('a very long break (> 3 h after auto-end) is still one visit', () => {
   async function splitVisit() {
     const s = new WorkoutStore();
     await s.startWorkout('CB-B', at(11, 7));
     await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 5));
-    // 40 min phone call, then the next set opens a second workout of the same session.
-    await s.completeSet(FIRST, 2, 40, 10, at(11, 7, 45));
+    // Back in the afternoon: the next set opens a second workout of the same session.
+    await s.completeSet(FIRST, 2, 40, 10, at(11, 12, 45));
     const workouts = await getAll<Workout>('workouts');
     const sets = await getAll<SetLog>('sets');
     expect(workouts).toHaveLength(2);

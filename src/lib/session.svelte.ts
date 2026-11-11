@@ -4,7 +4,7 @@ import { workout as defaultStore, type WorkoutStore } from './workout.svelte';
 export const AUTO_END_CHECK_MS = 60_000;
 
 /**
- * App-wide effects of an open workout: screen kept awake while one is active, the 15-min auto-end
+ * App-wide effects of an open workout: screen kept awake while one is active, the 60-min auto-end
  * rule checked every minute and whenever the page becomes visible, storage persistence asked once.
  * Returns a cleanup.
  */

@@ -322,9 +322,8 @@
       <span id="pause-lbl">Pause training<small>Injury or a break: hides the legs reminder</small></span>
       <button type="button" role="switch" class="switch" aria-checked={settings.paused} aria-labelledby="pause-lbl" onclick={() => save((c) => ({ ...c, paused: !c.paused }))}><i></i></button>
     </div>
-    {#if !workout.active}
-      <button class="secondary wide press" type="button" onclick={repeatLast}>Repeat last workout</button>
-    {/if}
+    <button class="secondary wide press" type="button" disabled={workout.active} onclick={repeatLast}>Repeat last workout</button>
+    {#if workout.active}<p class="hint">A workout is open. Finish it before repeating the last one.</p>{/if}
   </article>
 
   <!-- Exercises -->

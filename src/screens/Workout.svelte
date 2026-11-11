@@ -318,7 +318,7 @@
     </header>
 
     {#if !workout.active}
-      <p class="ended">This workout ended 15 minutes after your last set.</p>
+      <p class="ended">{workout.current?.autoEnded ? 'This workout closed after an hour without a set.' : 'This workout is finished.'}{workout.canResume() ? ' Logging a set carries on with it.' : ''}</p>
     {/if}
 
     <main class="list">
@@ -374,7 +374,12 @@
         <button class="discard" type="button" onclick={discard}>Discard workout (no sets yet)</button>
       {/if}
     {:else}
-      <button class="finish ready press" type="button" onclick={finish}>See summary</button>
+      {#if workout.canResume()}
+        <button class="finish ready press" type="button" onclick={() => workout.resume().catch(() => showToast('Could not continue'))}>Continue workout</button>
+        <button class="discard" type="button" onclick={finish}>See summary</button>
+      {:else}
+        <button class="finish ready press" type="button" onclick={finish}>See summary</button>
+      {/if}
     {/if}
   </section>
 {/if}

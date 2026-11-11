@@ -98,8 +98,8 @@ export function muscleTrend(sets: SetLog[], muscle: Muscle, today: string, looku
 }
 
 /**
- * One gym visit = same date + same session. A break of more than 15 min auto-ends a workout and the next set
- * opens a second workout of the same session, so counts must use visits, not workout records.
+ * One gym visit = same date + same session. A workout idle for 60 min auto-ends; a set more than 3 h after that
+ * (same day) opens a second workout of the same session, so counts must use visits, not workout records.
  */
 export const visitKey = (w: Pick<Workout, 'date' | 'sessionId'>) => `${w.date}|${w.sessionId}`;
 

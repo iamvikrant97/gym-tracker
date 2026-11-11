@@ -60,7 +60,7 @@ Automatic, not tied to weekday: next = the muscle group trained longest ago (Che
 - Back day logic: one vertical pull + one horizontal pull, plus one extra slot.
 
 ## Timers
-- **Workout clock**: starts on Start workout (after warm-up), stops on Finish (before stretching). Auto-ends 15 min after the last set if Finish is forgotten.
+- **Workout clock**: starts on Start workout (after warm-up), stops on Finish (before stretching). Auto-ends 60 min after the last set if Finish is forgotten; the same day (within 3 h) the next set or "Continue workout" carries on with it.
 - **Rest timer**: starts automatically after every set. Defaults 3:00 for compounds (presses, pulldowns, rows, leg press, deadlift), 2:00 for isolations; per-exercise up to 5:00. At zero it buzzes, turns amber and counts up (+0:20…). Actual rest is measured between ticks regardless.
 - Screen kept awake during a workout (Wake Lock). A closed/backgrounded app cannot alert — known platform limit.
 

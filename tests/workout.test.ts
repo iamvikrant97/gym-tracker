@@ -66,29 +66,30 @@ describe('workout store', () => {
     expect(fresh.current?.date).toBe('2026-11-11');
   });
 
-  it('auto-ends 15 min after the last done set when restored later', async () => {
+  it('auto-ends 60 min after the last done set when restored later', async () => {
     const s = new WorkoutStore();
     await s.startWorkout('CB-B', T0);
     await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
     const fresh = new WorkoutStore();
-    await fresh.restore(T0 + MIN + 16 * MIN);
+    await fresh.restore(T0 + MIN + 61 * MIN);
     expect(fresh.active).toBe(false);
-    expect(fresh.current?.endedAt).toBe(T0 + MIN + 15 * MIN);
+    expect(fresh.current?.endedAt).toBe(T0 + MIN + 60 * MIN);
+    expect(fresh.current?.autoEnded).toBe(true);
     expect(fresh.restEndsAt).toBeNull();
     const saved = (await getAll<Workout>('workouts'))[0];
-    expect(saved.endedAt).toBe(T0 + 16 * MIN);
+    expect(saved.endedAt).toBe(T0 + 61 * MIN);
     // and a second restore does not reopen it
     const again = new WorkoutStore();
-    await again.restore(T0 + 60 * MIN);
+    await again.restore(T0 + 90 * MIN);
     expect(again.active).toBe(false);
   });
 
-  it('does not auto-end within 15 min', async () => {
+  it('does not auto-end within 60 min', async () => {
     const s = new WorkoutStore();
     await s.startWorkout('CB-B', T0);
     await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
     const fresh = new WorkoutStore();
-    await fresh.restore(T0 + MIN + 14 * MIN);
+    await fresh.restore(T0 + MIN + 59 * MIN);
     expect(fresh.active).toBe(true);
   });
 
@@ -291,31 +292,31 @@ describe('review fixes', () => {
     expect(await loadSettings()).toMatchObject({ scriptUrl: 'a', scriptKey: 'b', weeklyTarget: 3 });
   });
 
-  it('I4: checkAutoEnd ends a stale workout at last set + 15 min without a restart', async () => {
+  it('I4: checkAutoEnd ends a stale workout at last set + 60 min without a restart', async () => {
     const s = new WorkoutStore();
     await s.startWorkout('CB-B', T0);
     await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
-    expect(await s.checkAutoEnd(T0 + MIN + 14 * MIN)).toBe(false);
+    expect(await s.checkAutoEnd(T0 + MIN + 59 * MIN)).toBe(false);
     expect(s.active).toBe(true);
-    expect(await s.checkAutoEnd(T0 + MIN + 16 * MIN)).toBe(true);
+    expect(await s.checkAutoEnd(T0 + MIN + 61 * MIN)).toBe(true);
     expect(s.active).toBe(false);
-    expect(s.current?.endedAt).toBe(T0 + 16 * MIN);
+    expect(s.current?.endedAt).toBe(T0 + 61 * MIN);
     expect(s.restEndsAt).toBeNull();
-    expect((await getAll<Workout>('workouts'))[0].endedAt).toBe(T0 + 16 * MIN);
+    expect((await getAll<Workout>('workouts'))[0].endedAt).toBe(T0 + 61 * MIN);
     expect(await s.checkAutoEnd(T0 + 99 * MIN)).toBe(false);
   });
 
-  it('I4b: a set logged > 15 min after the last one ends the old workout and joins a new one', async () => {
+  it('I4b: a set logged more than 3 h after auto-end opens a new workout of the same session', async () => {
     const s = new WorkoutStore();
     const w1 = await s.startWorkout('CB-B', T0);
     await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
-    const { set } = await s.completeSet(FIRST, 2, 40, 10, T0 + 2 * 60 * MIN);
+    const { set } = await s.completeSet(FIRST, 2, 40, 10, T0 + 5 * 60 * MIN);
     const all = await getAll<Workout>('workouts');
     expect(all).toHaveLength(2);
-    expect(all.find((w) => w.id === w1.id)?.endedAt).toBe(T0 + 16 * MIN);
+    expect(all.find((w) => w.id === w1.id)?.endedAt).toBe(T0 + 61 * MIN);
     expect(set.workoutId).not.toBe(w1.id);
     expect(s.current?.id).toBe(set.workoutId);
-    expect(s.current).toMatchObject({ sessionId: 'CB-B', startedAt: T0 + 2 * 60 * MIN });
+    expect(s.current).toMatchObject({ sessionId: 'CB-B', startedAt: T0 + 5 * 60 * MIN });
     expect(s.active).toBe(true);
     expect(s.sets).toHaveLength(1);
   });
@@ -323,7 +324,7 @@ describe('review fixes', () => {
   it('I4c: a workout with no sets yet is not split by a late first set', async () => {
     const s = new WorkoutStore();
     const w = await s.startWorkout('CB-B', T0);
-    const { set } = await s.completeSet(FIRST, 1, 40, 10, T0 + 20 * MIN);
+    const { set } = await s.completeSet(FIRST, 1, 40, 10, T0 + 70 * MIN);
     expect(set.workoutId).toBe(w.id);
     expect(await getAll('workouts')).toHaveLength(1);
   });

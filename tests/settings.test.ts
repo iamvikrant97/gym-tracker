@@ -149,6 +149,17 @@ describe('Settings screen', () => {
     });
   });
 
+  it('Repeat last workout is disabled while a workout is open, and the store refuses it', async () => {
+    await workout.startWorkout('CB-B', T0);
+    render(Settings);
+    const btn = await screen.findByRole('button', { name: 'Repeat last workout' });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    const open = workout.current!.id;
+    await expect(workout.repeatLast()).rejects.toThrow(/Finish/);
+    expect(workout.current?.id).toBe(open);
+    expect(workout.active).toBe(true);
+  });
+
   it('shows version and build date', async () => {
     render(Settings);
     expect(await screen.findByText(/Version \d+\.\d+\.\d+ · built \d{4}-\d{2}-\d{2}/)).toBeTruthy();
