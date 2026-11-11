@@ -151,6 +151,19 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
   const sent = posts.flatMap((p) => p.upserts);
   expect(sent.map((u) => `${u.exercise} ${u.kg}x${u.reps}`)).toEqual(['Converging chest press 40x11', 'Converging chest press 40x11']);
   expect(new Set(sent.map((u) => u.id)).size).toBe(2);
+  // In workout order: set 1 first, then set 2.
+  const logged = await page.evaluate(
+    () =>
+      new Promise<{ id: string; setNo: number; doneAt: number }[]>((ok) => {
+        const r = indexedDB.open('gym-tracker', 1);
+        r.onsuccess = () => {
+          const q = r.result.transaction('sets').objectStore('sets').getAll();
+          q.onsuccess = () => ok((q.result as { id: string; setNo: number; doneAt: number }[]).filter((x) => !x.id.startsWith('seed-')));
+        };
+      }),
+  );
+  expect(sent.map((u) => u.id)).toEqual(logged.sort((x, y) => x.doneAt - y.doneAt).map((x) => x.id));
+  expect(logged.map((x) => x.setNo)).toEqual([1, 2]);
   expect(posts.flatMap((p) => p.deletes)).toEqual([]);
   expect(errors).toEqual([]);
 });
