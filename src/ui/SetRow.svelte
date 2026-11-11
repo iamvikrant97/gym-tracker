@@ -170,16 +170,21 @@
     if (e.detail === 0) ontogglewarmup();
   }
 
+  /** A second tap this soon after logging is a double tap, not a request to change the set. */
+  const DOUBLE_TAP_MS = 1500;
   function chkClick() {
     if (suppress) return;
-    if (isDone) ondelete();
-    else oncheck();
+    if (!isDone) return oncheck();
+    // Never delete from ✓ (a double tap used to log then delete). A later tap opens the edit sheet,
+    // which has Delete; swipe left also deletes, with Undo.
+    if (Date.now() - Math.max(done!.doneAt, done!.updatedAt) < DOUBLE_TAP_MS) return;
+    onadjust('kg');
   }
 </script>
 
 <div class="wrap" class:swiping={rowSwiping}>
   {#if isDone}<span class="del" aria-hidden="true" style:opacity={Math.min(1, -swipeX / DELETE_DISTANCE)}>Delete</span>{/if}
-  <!-- Swipe-left-to-delete is a shortcut; the ✓ button does the same for keyboard and screen readers. -->
+  <!-- Swipe-left-to-delete is a shortcut; ✓ on a done row opens the edit sheet, which has Delete (keyboard, screen readers). -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="set"
@@ -241,7 +246,7 @@
       {reps === null ? '–' : reps}
       <span class="hint" aria-hidden="true">swipe</span>
     </button>
-    <button class="chk" type="button" aria-pressed={isDone} aria-label={isDone ? `Remove ${name}` : `Complete ${name}`} onclick={chkClick}>
+    <button class="chk" type="button" aria-pressed={isDone} aria-label={isDone ? `Edit ${name}` : `Complete ${name}`} onclick={chkClick}>
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
     </button>
   </div>
@@ -274,6 +279,7 @@
     font: 600 15px/1 var(--display); color: var(--muted); user-select: none; -webkit-user-select: none;
     -webkit-touch-callout: none;
   }
+  .set.done .sn { color: #a9b6d3; } /* 6.6:1 on --blue-deep (muted is 4.27:1) */
   .set.next .sn { color: var(--blue); }
   .set.warm .sn { color: var(--amber); }
   .prev { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; }

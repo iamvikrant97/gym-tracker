@@ -156,6 +156,25 @@ describe('Workout screen', () => {
     expect(toasts.message).toBe('');
   });
 
+  it('✓ on a done row never deletes: a quick second tap does nothing, a later one opens edit with Delete', async () => {
+    const { card } = await open();
+    await fireEvent.click(within(card).getByRole('button', { name: 'Complete set 1' }));
+    await waitFor(() => expect(incline()).toHaveLength(1));
+    const rest = workout.restEndsAt;
+    vi.setSystemTime(NOW + 250); // double tap
+    await fireEvent.click(within(card).getByRole('button', { name: 'Edit set 1' }));
+    expect(incline()).toHaveLength(1);
+    expect(workout.restEndsAt).toBe(rest);
+    expect(screen.queryByRole('dialog', { name: /Smith incline press/ })).toBeNull();
+    vi.setSystemTime(NOW + 5_000);
+    await fireEvent.click(within(card).getByRole('button', { name: 'Edit set 1' }));
+    const sheet = await screen.findByRole('dialog', { name: /Smith incline press · set 1/ });
+    expect(incline()).toHaveLength(1);
+    await fireEvent.click(within(sheet).getByRole('button', { name: 'Delete set' }));
+    await waitFor(() => expect(incline()).toHaveLength(0));
+    expect(screen.getByText('Set 1 deleted')).toBeTruthy();
+  });
+
   it('swipe left on a done row deletes it; Undo brings it back', async () => {
     const { card } = await open();
     await fireEvent.click(within(card).getByRole('button', { name: 'Complete set 1' }));

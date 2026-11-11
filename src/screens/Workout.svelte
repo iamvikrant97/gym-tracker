@@ -196,6 +196,13 @@
     adjOpen = true;
   }
 
+  async function deleteFromSheet() {
+    const id = adj?.doneId;
+    adjOpen = false;
+    const set = id ? workout.sets.find((s) => s.id === id) : undefined;
+    if (set) await remove(set);
+  }
+
   async function saveAdjust(kg: number, reps: number) {
     const a = adj;
     adjOpen = false;
@@ -390,6 +397,7 @@
   perArm={adj?.perArm ?? false}
   onsave={saveAdjust}
   onclose={() => (adjOpen = false)}
+  ondelete={adj?.doneId ? deleteFromSheet : undefined}
 />
 
 <SwapSheet

@@ -23,6 +23,7 @@
     perArm = false,
     onsave,
     onclose,
+    ondelete,
   }: {
     open: boolean;
     title: string;
@@ -34,6 +35,8 @@
     perArm?: boolean;
     onsave: (kg: number, reps: number) => void;
     onclose: () => void;
+    /** Shown for a set that is already logged. */
+    ondelete?: () => void;
   } = $props();
 
   function change(f: Field, d: number) {
@@ -94,6 +97,7 @@
     <button class="chip press" type="button" onclick={() => (kg = dropSet(kg, step))}>Drop set</button>
   </div>
   <button class="save press" type="button" onclick={() => onsave(kg, reps)}>Save set</button>
+  {#if ondelete}<button class="delete press" type="button" onclick={ondelete}>Delete set</button>{/if}
 </Sheet>
 
 <style>
@@ -110,6 +114,7 @@
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 18px; }
   .chip { height: 48px; padding: 0 16px; border-radius: 24px; background: var(--raised); font-size: 13.5px; }
   .chip:disabled { opacity: 0.4; }
+  .delete { display: block; width: 100%; height: 48px; margin-top: 8px; border-radius: 12px; color: var(--amber); font-size: 14.5px; }
   .save { width: 100%; height: 56px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; }
   @media (prefers-reduced-motion: reduce) {
     .sb { transition: background 120ms; }

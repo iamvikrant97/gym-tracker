@@ -1,56 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { queueLength, seed, SCRIPT } from './helpers';
 
 const SHOTS = '.superpowers/sdd/2026-11-11-gym-app/shots';
-const SCRIPT = 'https://script.google.com/macros/s/E2E/exec';
-
-/** Seeds the 9-11 Nov history (+ an older Chest + Back B so set 1 has a target) and the Sheet settings. */
-async function seed(page: Page) {
-  await page.evaluate(async (scriptUrl) => {
-    const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).getTime();
-    const day = (d: number) => `2026-11-${String(d).padStart(2, '0')}`;
-    const rows: [number, string, string, number][] = [
-      [2, 'CB-B', 'converging-chest-press', 3],
-      [9, 'CB-A', 'smith-flat-press', 3],
-      [10, 'SA-A', 'barbell-curl', 3],
-      [11, 'L-A', 'leg-press', 3],
-    ];
-    const db: IDBDatabase = await new Promise((ok, bad) => {
-      const r = indexedDB.open('gym-tracker', 1);
-      r.onsuccess = () => ok(r.result);
-      r.onerror = () => bad(r.error);
-    });
-    const tx = db.transaction(['workouts', 'sets', 'settings'], 'readwrite');
-    for (const [d, sessionId, exerciseId, n] of rows) {
-      const id = `seed-${d}`;
-      // 11 Nov: logged early, so a workout started now is a separate visit.
-      tx.objectStore('workouts').put({ id, date: day(d), sessionId, startedAt: at(d, 6), endedAt: at(d, 7), swaps: {} });
-      for (let i = 1; i <= n; i++) {
-        tx.objectStore('sets').put({
-          id: `${id}-${i}`, workoutId: id, date: day(d), sessionId, exerciseId, setNo: i, kg: 40, reps: 10,
-          warmup: false, feltIt: false, doneAt: at(d, 6, i * 3), updatedAt: at(d, 6, i * 3), deleted: false, synced: true,
-        });
-      }
-    }
-    tx.objectStore('settings').put({ key: 'main', value: { scriptUrl, scriptKey: 'e2e-key', weeklyTarget: 6, bodyKg: 65 } });
-    await new Promise((ok) => (tx.oncomplete = ok));
-    db.close();
-  }, SCRIPT);
-}
-
-const queueLength = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<number>((ok) => {
-        const r = indexedDB.open('gym-tracker', 1);
-        r.onsuccess = () => {
-          const q = r.result.transaction('queue').objectStore('queue').count();
-          q.onsuccess = () => {
-            ok(q.result);
-            r.result.close();
-          };
-        };
-      }),
-  );
 
 test('a full workout: start, log, reload mid-workout, swap in a new exercise, finish, progress', async ({ page }) => {
   const posts: { contentType: string; upserts: { id: string; exercise: string; kg: number; reps: number }[]; deletes: string[] }[] = [];
@@ -105,8 +56,8 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
   await page.reload();
   await expect(page).toHaveURL(/#\/workout$/);
   await expect(page.getByTestId('meter-label')).toContainText('2 of 16 sets');
-  await expect(first.getByRole('button', { name: 'Remove set 1' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(first.getByRole('button', { name: 'Remove set 2' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(first.getByRole('button', { name: 'Edit set 1' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(first.getByRole('button', { name: 'Edit set 2' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('rest-dock')).toHaveClass(/open/);
   await expect(page.getByTestId('rest-time')).toHaveText(/^(3:00|2:[0-5]\d)$/);
 
