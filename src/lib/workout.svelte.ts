@@ -2,6 +2,7 @@ import {
   addCustomExercise, get, getAll, getAllFromIndex, loadSettings, mergedSwapOptions, put, putAll, saveSettings,
 } from './db';
 import type { QueueItem } from './db';
+import { scheduleFlush } from './sync';
 import { isPR, lastSessionSets, targetFor } from './progression';
 import { exerciseById, rangeFor, TEMPLATES } from './seed';
 import type { Exercise, SessionId, SetLog, Settings, Workout } from './types';
@@ -204,6 +205,7 @@ export class WorkoutStore {
       { store: 'sets', value: set },
       { store: 'queue', value: { id: set.id, op } satisfies QueueItem },
     ]);
+    scheduleFlush();
   }
 
   completeSet(exerciseId: string, setNo: number, kg: number, reps: number, now: number = Date.now()): Promise<{ set: SetLog; pr: boolean }> {
