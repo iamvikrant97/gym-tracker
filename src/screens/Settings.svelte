@@ -387,7 +387,7 @@
   .status { margin: -4px 0 0; font-size: 13.5px; color: var(--text); }
   .status.warn { color: var(--amber); }
   .field { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }
-  input, select {
+  input:not(.sr-only), select {
     height: 48px; width: 100%; min-width: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--raised);
     color: var(--text); padding: 0 12px; font: inherit; font-size: 15px;
   }
@@ -410,10 +410,10 @@
   .line { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; }
   .line > :first-child { flex: 1; }
   .line small { display: block; font-size: 12px; color: var(--muted); }
-  .num { width: 96px; text-align: center; }
+  .line input.num { width: 96px; flex: none; text-align: center; }
   .stepper { display: flex; align-items: center; gap: 4px; }
   .stepper button { width: 48px; height: 48px; border-radius: 12px; background: var(--raised); font-size: 20px; }
-  .stepper input { width: 52px; text-align: center; padding: 0; background: transparent; border: 0; font: 600 18px/1 var(--display); -moz-appearance: textfield; appearance: textfield; }
+  .stepper input:not(.sr-only) { width: 52px; text-align: center; padding: 0; background: transparent; border: 0; font: 600 18px/1 var(--display); -moz-appearance: textfield; appearance: textfield; }
   .switch { width: 52px; height: 32px; border-radius: 16px; background: var(--raised); border: 2px solid var(--ring); position: relative; flex: none; transition: background 200ms var(--ease-out); }
   .switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform 200ms var(--ease-out), background 200ms; }
   .switch[aria-checked='true'] { background: var(--blue-deep); border-color: var(--blue); }

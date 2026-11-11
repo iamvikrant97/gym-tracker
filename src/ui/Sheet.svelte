@@ -147,16 +147,18 @@
     max-height: 88vh; overflow-y: auto;
     background: var(--surface); border: 1px solid var(--line); border-bottom: 0;
     border-radius: 22px 22px 0 0; padding: 8px 18px 26px; outline: none;
-    transform: translate(-50%, 100%); transition: transform 420ms var(--ease-drawer);
+    transform: translate(-50%, 100%); transition: transform 420ms var(--ease-drawer), visibility 0s linear 420ms;
     pointer-events: none; /* explicit: a sheet inside the pointer-events:none dock must still work when open */
+    visibility: hidden; /* once slid out it can never peek in (tall screens, browser toolbars) */
   }
-  .sheet.open { transform: translate(-50%, 0); pointer-events: auto; }
+  .sheet.open { transform: translate(-50%, 0); pointer-events: auto; visibility: visible; transition: transform 420ms var(--ease-drawer), visibility 0s; }
   .head { touch-action: none; }
   .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--ring); margin: 4px auto 14px; }
   h2 { font: 800 21px/1.15 var(--body); margin: 0 0 4px; }
   .sub { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
   @media (prefers-reduced-motion: reduce) {
-    .scrim, .sheet { transition: opacity 200ms ease; }
+    .scrim, .sheet { transition: opacity 200ms ease, visibility 0s linear 200ms; }
+    .sheet.open { transition: opacity 200ms ease, visibility 0s; }
     .sheet { transform: translate(-50%, 0); opacity: 0; pointer-events: none; }
     .sheet.open { opacity: 1; pointer-events: auto; }
   }
