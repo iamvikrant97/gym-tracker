@@ -86,8 +86,24 @@ export async function loadSettings(): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...(row?.value ?? {}) };
 }
 
+/** Overwrites all settings. Prefer updateSettings(): this clobbers anything saved since `s` was read. */
 export async function saveSettings(s: Settings): Promise<void> {
   await put('settings', { key: 'main', value: s });
+}
+
+/**
+ * Read-modify-write of the settings row in ONE transaction, so a concurrent writer (Settings screen,
+ * swap, sync) is never overwritten with a stale copy. Returns the saved settings.
+ */
+export async function updateSettings(change: Partial<Settings> | ((cur: Settings) => Settings)): Promise<Settings> {
+  const db = await openDb();
+  const tx = db.transaction('settings', 'readwrite');
+  const store = tx.objectStore('settings');
+  const row = (await store.get('main')) as { key: string; value: Partial<Settings> } | undefined;
+  const cur: Settings = { ...DEFAULT_SETTINGS, ...(row?.value ?? {}) };
+  const next = typeof change === 'function' ? change(cur) : { ...cur, ...change };
+  await Promise.all([store.put({ key: 'main', value: next }), tx.done]);
+  return next;
 }
 
 // ---- Exercises: seed library + user-added ones ------------------------------------------

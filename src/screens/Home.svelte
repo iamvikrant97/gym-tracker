@@ -67,7 +67,7 @@
   const plan = $derived(describe(template));
   const doneThisWeek = $derived(workouts.filter((w) => weekStart(w.date) === weekStart(today)).length);
   const sessionNo = $derived(Math.max(1, resuming ? doneThisWeek : doneThisWeek + 1));
-  const notes = $derived(homeNotes(sets, workouts, settings, today));
+  const notes = $derived(homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)));
 
   /** Splits a note into plain and emphasised parts (counts and ages read as the figures). */
   function parts(line: string): { text: string; strong: boolean }[] {

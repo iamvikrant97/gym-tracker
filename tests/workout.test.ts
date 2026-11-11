@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { addCustomExercise, closeDb, exerciseLookup, getAll, listExercises, saveSettings, DEFAULT_SETTINGS } from '../src/lib/db';
+import { addCustomExercise, closeDb, exerciseLookup, getAll, listExercises, saveSettings, updateSettings, loadSettings, DEFAULT_SETTINGS } from '../src/lib/db';
 import type { QueueItem } from '../src/lib/db';
 import { WorkoutStore } from '../src/lib/workout.svelte';
 import { exerciseById, swapOptions } from '../src/lib/seed';
@@ -35,6 +35,7 @@ describe('workout store', () => {
     const a = await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
     const b = await s.completeSet(FIRST, 1, 42.5, 8, T0 + 2 * MIN);
     expect(b.set.id).toBe(a.set.id);
+    expect(b.set).toMatchObject({ kg: 42.5, reps: 8, doneAt: T0 + MIN, updatedAt: T0 + 2 * MIN }); // an edit, not a new completion
     expect(await sets()).toHaveLength(1);
   });
 
@@ -225,6 +226,149 @@ describe('workout store', () => {
     await s.editSet(set.id, { kg: 42.5, feltIt: true, note: 'tough' });
     expect(s.sets[0]).toMatchObject({ kg: 42.5, feltIt: true, note: 'tough' });
     expect((await sets())[0]).toMatchObject({ kg: 42.5, feltIt: true, note: 'tough' });
+  });
+});
+
+describe('review fixes', () => {
+  it('I1: undo after re-logging the same set number does not create a duplicate', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    const a = await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    const undo = await s.deleteSet(a.set.id, T0 + MIN + 1000);
+    await s.completeSet(FIRST, 1, 40, 10, T0 + MIN + 2000);
+    await undo(T0 + MIN + 3000);
+    expect(s.sets.filter((x) => x.exerciseId === FIRST && x.setNo === 1)).toHaveLength(1);
+    const live = (await sets()).filter((x) => !x.deleted && x.setNo === 1);
+    expect(live).toHaveLength(1);
+    expect(live[0].id).not.toBe(a.set.id);
+  });
+
+  it('I2: editing a deleted set throws and never re-upserts it', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    const a = await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    await s.deleteSet(a.set.id, T0 + MIN);
+    await expect(s.editSet(a.set.id, { kg: 50 })).rejects.toThrow(/deleted/);
+    expect(await queue()).toEqual([{ id: a.set.id, op: 'delete' }]);
+  });
+
+  it('I2b: deleting an old-history set queues a delete, undo queues an upsert', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    const a = await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    await s.finish(T0 + 2 * MIN);
+    const n = new WorkoutStore();
+    await n.startWorkout('CB-B', T0 + 24 * 60 * MIN);
+    const undo = await n.deleteSet(a.set.id, T0 + 25 * 60 * MIN);
+    expect((await queue())[0].op).toBe('delete');
+    await undo(T0 + 25 * 60 * MIN + 1000);
+    expect((await queue())[0].op).toBe('upsert');
+  });
+
+  it('I3: a permanent swap keeps settings saved elsewhere after the workout started', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    await updateSettings({ scriptUrl: 'https://x.test/exec', scriptKey: 'k', restOverrides: { [FIRST]: 60 } });
+    const alt = swapOptions('pec-fly-machine').find((e) => e.id !== 'pec-fly-machine')!;
+    await s.swap('pec-fly-machine', alt.id, true);
+    const saved = await loadSettings();
+    expect(saved).toMatchObject({ scriptUrl: 'https://x.test/exec', scriptKey: 'k', restOverrides: { [FIRST]: 60 } });
+    expect(saved.templateOverrides['CB-B']).toEqual({ 'pec-fly-machine': alt.id });
+    expect(s.restSecFor(FIRST)).toBe(60); // in-memory copy refreshed too
+  });
+
+  it('I3b: store.updateSettings merges into the stored row and refreshes memory', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    await s.updateSettings({ weeklyTarget: 5 });
+    await s.updateSettings({ scriptUrl: 'u' });
+    expect(await loadSettings()).toMatchObject({ weeklyTarget: 5, scriptUrl: 'u' });
+    expect(s.settings).toMatchObject({ weeklyTarget: 5, scriptUrl: 'u' });
+  });
+
+  it('I3c: updateSettings is atomic against concurrent updates', async () => {
+    await Promise.all([updateSettings({ scriptUrl: 'a' }), updateSettings({ scriptKey: 'b' }), updateSettings({ weeklyTarget: 3 })]);
+    expect(await loadSettings()).toMatchObject({ scriptUrl: 'a', scriptKey: 'b', weeklyTarget: 3 });
+  });
+
+  it('I4: checkAutoEnd ends a stale workout at last set + 15 min without a restart', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    expect(await s.checkAutoEnd(T0 + MIN + 14 * MIN)).toBe(false);
+    expect(s.active).toBe(true);
+    expect(await s.checkAutoEnd(T0 + MIN + 16 * MIN)).toBe(true);
+    expect(s.active).toBe(false);
+    expect(s.current?.endedAt).toBe(T0 + 16 * MIN);
+    expect(s.restEndsAt).toBeNull();
+    expect((await getAll<Workout>('workouts'))[0].endedAt).toBe(T0 + 16 * MIN);
+    expect(await s.checkAutoEnd(T0 + 99 * MIN)).toBe(false);
+  });
+
+  it('I4b: a set logged > 15 min after the last one ends the old workout and joins a new one', async () => {
+    const s = new WorkoutStore();
+    const w1 = await s.startWorkout('CB-B', T0);
+    await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    const { set } = await s.completeSet(FIRST, 2, 40, 10, T0 + 2 * 60 * MIN);
+    const all = await getAll<Workout>('workouts');
+    expect(all).toHaveLength(2);
+    expect(all.find((w) => w.id === w1.id)?.endedAt).toBe(T0 + 16 * MIN);
+    expect(set.workoutId).not.toBe(w1.id);
+    expect(s.current?.id).toBe(set.workoutId);
+    expect(s.current).toMatchObject({ sessionId: 'CB-B', startedAt: T0 + 2 * 60 * MIN });
+    expect(s.active).toBe(true);
+    expect(s.sets).toHaveLength(1);
+  });
+
+  it('I4c: a workout with no sets yet is not split by a late first set', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', T0);
+    const { set } = await s.completeSet(FIRST, 1, 40, 10, T0 + 20 * MIN);
+    expect(set.workoutId).toBe(w.id);
+    expect(await getAll('workouts')).toHaveLength(1);
+  });
+
+  it('M1: warm-up renumbering is a single transaction', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    const w1 = await s.completeSet(FIRST, 1, 20, 10, T0 + MIN);
+    await s.completeSet(FIRST, 2, 40, 10, T0 + 3 * MIN);
+    await s.completeSet(FIRST, 3, 40, 9, T0 + 6 * MIN);
+    const { openDb } = await import('../src/lib/db');
+    const db = await openDb();
+    let txs = 0;
+    const orig = db.transaction.bind(db);
+    vi.spyOn(db, 'transaction').mockImplementation(((...a: Parameters<typeof orig>) => {
+      if (a[1] === 'readwrite') txs++;
+      return orig(...a);
+    }) as never);
+    await s.editSet(w1.set.id, { warmup: true });
+    expect(txs).toBe(1);
+  });
+
+  it('M2/M3: logging an already-done setNo edits that set (keeps id and doneAt) and PR ignores later sets', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    const a = await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    await s.completeSet(FIRST, 2, 60, 10, T0 + 5 * MIN);
+    const again = await s.completeSet(FIRST, 1, 45, 10, T0 + 6 * MIN);
+    expect(again.set.id).toBe(a.set.id);
+    expect(again.set.doneAt).toBe(T0 + MIN);
+    expect(again.pr).toBe(false); // set 2 (60 kg) came later, so it is not "prior"
+    expect(s.sets).toHaveLength(2);
+  });
+
+  it('M4: editSet and deleteSet take an injectable now', async () => {
+    const s = new WorkoutStore();
+    await s.startWorkout('CB-B', T0);
+    const a = await s.completeSet(FIRST, 1, 40, 10, T0 + MIN);
+    await s.editSet(a.set.id, { kg: 41 }, T0 + 2 * MIN);
+    expect((await sets())[0].updatedAt).toBe(T0 + 2 * MIN);
+    const undo = await s.deleteSet(a.set.id, T0 + 3 * MIN);
+    await undo(T0 + 3 * MIN + 5_001);
+    expect(s.sets).toHaveLength(0);
+    await undo(T0 + 3 * MIN + 4_000); // already expired and consumed
+    expect(s.sets).toHaveLength(0);
   });
 });
 

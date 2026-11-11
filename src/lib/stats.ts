@@ -1,6 +1,6 @@
 import { e1rm, isPR } from './progression';
 import { exerciseById } from './seed';
-import type { Muscle, SetLog, Settings, Workout } from './types';
+import type { Exercise, Muscle, SetLog, Settings, Workout } from './types';
 
 const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
 const DAY_MS = 86_400_000;
@@ -10,7 +10,10 @@ const SECONDS_PER_SET = 40;
 /** Working sets only: warm-up and deleted sets never count. */
 const working = (s: SetLog) => !s.warmup && !s.deleted;
 
-const muscleOf = (s: SetLog): Muscle => exerciseById(s.exerciseId)?.muscle ?? 'Other';
+/** Resolves an exercise id (seed by default; pass the store's lookup to include custom exercises). */
+export type ExerciseLookup = (id: string) => Exercise | undefined;
+
+const muscleOf = (s: SetLog, lookup: ExerciseLookup): Muscle => lookup(s.exerciseId)?.muscle ?? 'Other';
 
 // Dates are local YYYY-MM-DD strings; do day arithmetic in UTC so DST/timezone never shifts a day.
 const toDay = (date: string) => Math.floor(Date.parse(`${date}T00:00:00Z`) / DAY_MS);
@@ -23,22 +26,22 @@ export function weekStart(date: string): string {
   return fromDay(day - sinceMonday);
 }
 
-export function weeklySets(sets: SetLog[], weekOf: string): Record<Muscle, number> {
+export function weeklySets(sets: SetLog[], weekOf: string, lookup: ExerciseLookup = exerciseById): Record<Muscle, number> {
   const start = weekStart(weekOf);
   const out = Object.fromEntries(MUSCLES.map((m) => [m, 0])) as Record<Muscle, number>;
   for (const s of sets) {
     if (!working(s) || weekStart(s.date) !== start) continue;
-    out[muscleOf(s)]++;
+    out[muscleOf(s, lookup)]++;
   }
   return out;
 }
 
 /** Working sets of one muscle per week, oldest to newest; the last entry is the week of `today`. */
-export function setsPerWeek(sets: SetLog[], muscle: Muscle, weeks: number, today: string): number[] {
+export function setsPerWeek(sets: SetLog[], muscle: Muscle, weeks: number, today: string, lookup: ExerciseLookup = exerciseById): number[] {
   const thisWeek = toDay(weekStart(today));
   const counts = new Array<number>(Math.max(0, weeks)).fill(0);
   for (const s of sets) {
-    if (!working(s) || muscleOf(s) !== muscle) continue;
+    if (!working(s) || muscleOf(s, lookup) !== muscle) continue;
     const back = Math.round((thisWeek - toDay(weekStart(s.date))) / 7);
     if (back >= 0 && back < counts.length) counts[counts.length - 1 - back]++;
   }
@@ -46,10 +49,10 @@ export function setsPerWeek(sets: SetLog[], muscle: Muscle, weeks: number, today
 }
 
 /** Whole days since the muscle last had a working set; null if never. Future-dated sets count as 0. */
-export function daysSince(sets: SetLog[], muscle: Muscle, today: string): number | null {
+export function daysSince(sets: SetLog[], muscle: Muscle, today: string, lookup: ExerciseLookup = exerciseById): number | null {
   let last: string | null = null;
   for (const s of sets) {
-    if (!working(s) || muscleOf(s) !== muscle) continue;
+    if (!working(s) || muscleOf(s, lookup) !== muscle) continue;
     if (last === null || s.date > last) last = s.date;
   }
   return last === null ? null : Math.max(0, toDay(today) - toDay(last));
@@ -63,19 +66,19 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
  * of the muscle in the two windows, or when no exercise can be compared.
  * Assisted exercises are skipped: their kg is assistance, so e1RM does not apply.
  */
-export function muscleTrend(sets: SetLog[], muscle: Muscle, today: string): number | null {
+export function muscleTrend(sets: SetLog[], muscle: Muscle, today: string, lookup: ExerciseLookup = exerciseById): number | null {
   const now = toDay(today);
   const recent = new Map<string, Map<string, number>>(); // exerciseId -> date -> best e1RM
   const prior = new Map<string, Map<string, number>>();
   const sessions = new Set<string>();
 
   for (const s of sets) {
-    if (!working(s) || muscleOf(s) !== muscle || s.reps <= 0) continue;
+    if (!working(s) || muscleOf(s, lookup) !== muscle || s.reps <= 0) continue;
     const ago = now - toDay(s.date);
     const bucket = ago >= 0 && ago <= 13 ? recent : ago >= 28 && ago <= 42 ? prior : null;
     if (!bucket) continue;
     sessions.add(s.date);
-    if (exerciseById(s.exerciseId)?.assisted) continue;
+    if (lookup(s.exerciseId)?.assisted) continue;
     const byDate = bucket.get(s.exerciseId) ?? new Map<string, number>();
     byDate.set(s.date, Math.max(byDate.get(s.date) ?? 0, e1rm(s.kg, s.reps)));
     bucket.set(s.exerciseId, byDate);
@@ -94,13 +97,15 @@ export function muscleTrend(sets: SetLog[], muscle: Muscle, today: string): numb
   return Math.round(mean(changes) * 10) / 10;
 }
 
-export function homeNotes(sets: SetLog[], workouts: Workout[], s: Settings, today: string): string[] {
+export function homeNotes(sets: SetLog[], workouts: Workout[], s: Settings, today: string, lookup: ExerciseLookup = exerciseById): string[] {
   const start = weekStart(today);
-  const done = workouts.filter((w) => weekStart(w.date) === start).length;
+  // A workout with no logged sets (started, then abandoned) is not a session done.
+  const hasSets = new Set(sets.filter(working).map((x) => x.workoutId));
+  const done = workouts.filter((w) => weekStart(w.date) === start && hasSets.has(w.id)).length;
   const notes = [`${done} of ${s.weeklyTarget} sessions done this week`];
   if (!s.paused) {
     const ages = (['Quads', 'Hamstrings', 'Calves'] as const)
-      .map((m) => daysSince(sets, m, today))
+      .map((m) => daysSince(sets, m, today, lookup))
       .filter((d): d is number => d !== null);
     const legs = ages.length ? Math.min(...ages) : null;
     if (legs !== null && legs >= 5) notes.push(`Legs trained ${legs} days ago`);
@@ -112,6 +117,7 @@ export function workoutSummary(
   w: Workout,
   sets: SetLog[],
   bodyKg: number,
+  lookup: ExerciseLookup = exerciseById,
 ): { minutes: number; sets: number; volume: number; prs: string[]; avgRestSec: number; workRatio: number; kcal: number } {
   const mine = sets.filter((s) => s.workoutId === w.id && working(s)).sort((a, b) => a.doneAt - b.doneAt);
   const lastDone = mine.length ? mine[mine.length - 1].doneAt : w.startedAt;
@@ -130,7 +136,7 @@ export function workoutSummary(
   // A PR is measured against earlier workouts only, so a progressing session is not flagged by its own sets.
   const prs: string[] = [];
   for (const s of mine) {
-    const ex = exerciseById(s.exerciseId);
+    const ex = lookup(s.exerciseId);
     if (!ex || prs.includes(ex.name)) continue;
     const history = sets.filter(
       (h) => h.exerciseId === s.exerciseId && h.workoutId !== w.id && (h.date < w.date || h.doneAt < w.startedAt),

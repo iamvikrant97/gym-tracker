@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   weekStart, weeklySets, setsPerWeek, daysSince, muscleTrend, homeNotes, workoutSummary,
 } from '../src/lib/stats';
-import type { SetLog, Settings, Workout } from '../src/lib/types';
+import type { Exercise, SetLog, Settings, Workout } from '../src/lib/types';
 
 let n = 0;
 const set = (date: string, exerciseId: string, kg: number, reps: number, o: Partial<SetLog> = {}): SetLog => ({
@@ -141,20 +141,22 @@ describe('muscleTrend', () => {
 
 describe('homeNotes', () => {
   const workouts = [workout('2026-11-09'), workout('2026-11-10', { sessionId: 'SA-A' })];
+  // one working set per workout so both count as sessions done
+  const logged = [set('2026-11-09', 'smith-flat-press', 60, 8), set('2026-11-10', 'db-shoulder-press', 20, 10)];
   it('shows sessions done this week and an old legs note', () => {
     const legs = [set('2026-11-05', 'leg-extension', 40, 12)];
-    expect(homeNotes(legs, workouts, settings, '2026-11-11')).toEqual([
+    expect(homeNotes([...logged, ...legs], workouts, settings, '2026-11-11')).toEqual([
       '2 of 4 sessions done this week',
       'Legs trained 6 days ago',
     ]);
   });
   it('omits the legs line when trained under 5 days ago', () => {
     const legs = [set('2026-11-08', 'leg-extension', 40, 12)];
-    expect(homeNotes(legs, workouts, settings, '2026-11-11')).toEqual(['2 of 4 sessions done this week']);
+    expect(homeNotes([...logged, ...legs], workouts, settings, '2026-11-11')).toEqual(['2 of 4 sessions done this week']);
   });
   it('omits the legs line when paused', () => {
     const legs = [set('2026-11-01', 'leg-extension', 40, 12)];
-    expect(homeNotes(legs, workouts, { ...settings, paused: true }, '2026-11-11')).toEqual([
+    expect(homeNotes([...logged, ...legs], workouts, { ...settings, paused: true }, '2026-11-11')).toEqual([
       '2 of 4 sessions done this week',
     ]);
   });
@@ -162,6 +164,44 @@ describe('homeNotes', () => {
     const legs = [set('2026-11-10', 'leg-extension', 40, 12)];
     const out = homeNotes(legs, [workout('2026-11-02')], settings, '2026-11-11');
     expect(out).toEqual(['0 of 4 sessions done this week']);
+  });
+});
+
+describe('homeNotes ignores workouts with no sets', () => {
+  it('does not count an abandoned workout as a session', () => {
+    const ws = [workout('2026-11-09'), workout('2026-11-10', { sessionId: 'SA-A' })];
+    const out = homeNotes([set('2026-11-09', 'smith-flat-press', 60, 8)], ws, settings, '2026-11-11');
+    expect(out[0]).toBe('1 of 4 sessions done this week');
+  });
+});
+
+describe('custom exercise lookup', () => {
+  const custom: Exercise = {
+    id: 'custom-1', name: 'Cable crossover low', slot: 'Chest fly', muscle: 'Chest', kind: 'isolation',
+    step: 2.5, repMin: 10, repMax: 15, restSec: 120,
+  };
+  const lookup = (id: string) => (id === custom.id ? custom : undefined);
+  const lk = (id: string) => lookup(id) ?? undefined;
+  const cs = (date: string, kg: number, reps: number, o: Partial<SetLog> = {}) => set(date, custom.id, kg, reps, o);
+
+  it('without a lookup a custom exercise counts as Other; with it, as its muscle', () => {
+    const sets = [cs('2026-11-09', 20, 12)];
+    expect(weeklySets(sets, '2026-11-09').Other).toBe(1);
+    const w = weeklySets(sets, '2026-11-09', lk as never);
+    expect(w.Chest).toBe(1);
+    expect(setsPerWeek(sets, 'Chest', 1, '2026-11-11', lk as never)).toEqual([1]);
+    expect(daysSince(sets, 'Chest', '2026-11-12', lk as never)).toBe(3);
+  });
+
+  it('workoutSummary lists a PR for a custom exercise', () => {
+    const start = Date.parse('2026-11-11T07:00:00+05:30');
+    const w = workout('2026-11-11', { startedAt: start, endedAt: start + 600_000 });
+    const sets = [
+      cs('2026-11-02', 20, 10, { workoutId: 'old', doneAt: start - 9 * 86_400_000 }),
+      cs('2026-11-11', 22.5, 10, { workoutId: w.id, doneAt: start + 1000 }),
+    ];
+    expect(workoutSummary(w, sets, 80).prs).toEqual([]);
+    expect(workoutSummary(w, sets, 80, lk as never).prs).toEqual([custom.name]);
   });
 });
 
