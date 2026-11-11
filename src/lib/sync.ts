@@ -7,16 +7,18 @@ import type { Exercise, Muscle, SessionId, SetLog, Workout } from './types';
 
 export const BATCH_SIZE = 50;
 export const REQUEST_TIMEOUT_MS = 20_000;
+/** Reading the Log: the first import also writes ids into a long hand-typed Sheet, so allow longer. */
+export const IMPORT_TIMEOUT_MS = 90_000;
 export const DEBOUNCE_MS = 2_000;
 export const BACKOFF_BASE_MS = 5_000;
 export const BACKOFF_MAX_MS = 5 * 60_000;
 /** After this many flushes in which the bridge skipped an entry, it stops blocking and is flagged "attention". */
 export const ATTENTION_AFTER = 5;
 
-const tuning = { requestMs: REQUEST_TIMEOUT_MS, debounceMs: DEBOUNCE_MS, backoffBaseMs: BACKOFF_BASE_MS };
+const tuning = { requestMs: REQUEST_TIMEOUT_MS, importMs: IMPORT_TIMEOUT_MS, debounceMs: DEBOUNCE_MS, backoffBaseMs: BACKOFF_BASE_MS };
 /** Test hook: shorten the timers. `_tune({})` restores the defaults. */
 export function _tune(t: Partial<typeof tuning>): void {
-  Object.assign(tuning, { requestMs: REQUEST_TIMEOUT_MS, debounceMs: DEBOUNCE_MS, backoffBaseMs: BACKOFF_BASE_MS }, t);
+  Object.assign(tuning, { requestMs: REQUEST_TIMEOUT_MS, importMs: IMPORT_TIMEOUT_MS, debounceMs: DEBOUNCE_MS, backoffBaseMs: BACKOFF_BASE_MS }, t);
 }
 
 export function backoffMs(failureCount: number): number {
@@ -186,11 +188,14 @@ async function getSheet(fetchFn: typeof fetch, url: string, key: string): Promis
   const u = url.trim();
   const sep = u.includes('?') ? '&' : '?';
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
-  const timer = ctrl ? setTimeout(() => ctrl.abort(), Math.max(tuning.requestMs, 30_000)) : undefined;
+  let timedOut = false;
+  const timer = ctrl ? setTimeout(() => ((timedOut = true), ctrl.abort()), tuning.importMs) : undefined;
   let res: Response;
   try {
     res = await fetchFn(`${u}${sep}key=${encodeURIComponent(key.trim())}`, { redirect: 'follow', signal: ctrl?.signal });
   } catch {
+    // The script keeps working after we stop waiting, and import is merged by id: trying again is safe.
+    if (timedOut) return { ok: false, error: 'The Sheet is taking long (the first import does the most work). Wait a minute, then tap Try again. Nothing is duplicated' };
     return { ok: false, error: 'Could not reach the script. Check the internet connection and the URL' };
   } finally {
     if (timer) clearTimeout(timer);

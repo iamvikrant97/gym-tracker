@@ -1,5 +1,5 @@
 // @ts-ignore plain JS module shared with Apps Script
-import { applyUpserts, applyDeletes, assignIds, fillInherited, readLog, readExercises, LOG_WIDTH, LOG_FIRST } from '../apps-script/core.js';
+import { applyUpserts, applyDeletes, assignIds, changedSpan, fillInherited, readLog, readExercises, LOG_WIDTH, LOG_FIRST } from '../apps-script/core.js';
 import { readFileSync } from 'node:fs';
 
 type Row = any[];
@@ -73,9 +73,30 @@ describe('sheet core', () => {
     for (const c of [0, 1, 2, 5, 6, 7, 9, 27]) expect(row[c]).toBe('');
     expect(row[3]).toBe('D-formula');
     expect(readLog(b).map((r: any) => r.id)).toEqual(['s2']);
-    // deleting an id that is gone (retry) is harmless, and the freed row is reused
+    // deleting an id that is gone (retry) is harmless
     expect(applyDeletes(b, ['s1', 'nope'])).toEqual(b);
-    expect(applyUpserts(b, a.exercisesRows, [set({ id: 's3' })]).logRows[LOG_FIRST][27]).toBe('s3');
+  });
+
+  it('changedSpan finds the rows to write in one block (first import stays fast)', () => {
+    const before = blankLog();
+    const after = before.map((r) => r.slice());
+    expect(changedSpan(before, after, [0, 1, 2])).toBeNull();
+    after[LOG_FIRST + 1][2] = 'Pec fly machine';
+    after[LOG_FIRST + 3][0] = '2026-11-09';
+    after[LOG_FIRST + 2][27] = 'id-x';
+    expect(changedSpan(before, after, [0, 1, 2])).toEqual([LOG_FIRST + 1, LOG_FIRST + 3]);
+    expect(changedSpan(before, after, [27])).toEqual([LOG_FIRST + 2, LOG_FIRST + 2]);
+  });
+
+  it('a new set goes after the last used row, never into a hole left by a delete (I4)', () => {
+    const a = applyUpserts(blankLog(), exercises(), [set(), set({ id: 's2' }), set({ id: 's3' })]);
+    const holed = applyDeletes(a.logRows, ['s2']); // cleared middle row
+    const r = applyUpserts(holed, a.exercisesRows, [set({ id: 's4' }), set({ id: 's1', reps: 9 })]);
+    expect(r.logRows[LOG_FIRST + 1][27]).toBe(''); // the hole stays empty
+    expect(r.logRows[LOG_FIRST + 3][27]).toBe('s4'); // appended below s3
+    expect(r.logRows[LOG_FIRST][27]).toBe('s1'); // an existing id is updated in its own row
+    expect(r.logRows[LOG_FIRST][6]).toBe(9);
+    expect(readLog(r.logRows).map((x: any) => x.id)).toEqual(['s1', 's3', 's4']);
   });
 
   it('unknown exercise is added to library', () => {

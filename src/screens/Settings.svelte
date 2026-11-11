@@ -30,6 +30,7 @@
   let spotifyMsg = $state('');
   let backupMsg = $state<{ text: string; bad: boolean } | null>(null);
   let busy = $state(false);
+  let importFailed = $state(false);
   let status = $state<SyncState>('not-set-up');
   let lastAt = $state<number | null>(null);
   let waiting = $state(0);
@@ -90,6 +91,7 @@
     try {
       if (!(await saveSheet())) return;
       const r = await importFromSheet();
+      importFailed = !r.ok;
       if (!r.ok) {
         sheetMsg = { text: r.error ?? 'Import failed', bad: true };
         return;
@@ -279,6 +281,7 @@
       <button class="secondary press" type="button" disabled={busy || status === 'not-set-up'} onclick={syncNow}>Sync now</button>
     </div>
     {#if sheetMsg}<p class="msg" class:bad={sheetMsg.bad} role="status">{sheetMsg.text}</p>{/if}
+    {#if importFailed}<button class="secondary wide press" type="button" disabled={busy} onclick={saveAndImport}>Try again</button>{/if}
     <p class="hint">Import adds sets from the Sheet that the app does not have yet. It is safe to run again.</p>
   </article>
 

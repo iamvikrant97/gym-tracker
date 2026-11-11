@@ -193,7 +193,7 @@ describe('rest state survives a restart', () => {
 });
 
 import { putAll, saveSettings } from '../src/lib/db';
-import { _resetSyncState, flush, importFromSheet, lastSyncAt, onSyncChange, syncLabel, testConnection } from '../src/lib/sync';
+import { _resetSyncState, _tune, flush, importFromSheet, lastSyncAt, onSyncChange, syncLabel, testConnection } from '../src/lib/sync';
 
 describe('sync wiring', () => {
   const SETTINGS = { ...DEFAULT_SETTINGS, scriptUrl: 'https://script.google.com/macros/s/X/exec', scriptKey: 'k' };
@@ -238,6 +238,19 @@ describe('sync wiring', () => {
     const f = reply({ ok: true, log: [] });
     expect(await testConnection(f)).toMatchObject({ ok: false, error: expect.stringMatching(/\/exec/) });
     expect(f).not.toHaveBeenCalled();
+  });
+
+  it('a slow first import times out with a "try again" message, and trying again is safe', async () => {
+    _tune({ importMs: 20 });
+    await saveSettings(SETTINGS);
+    const slow = vi.fn((_u: unknown, init?: RequestInit) => new Promise<Response>((_ok, bad) => init?.signal?.addEventListener('abort', () => bad(new DOMException('aborted', 'AbortError')))));
+    const r = await importFromSheet(slow as unknown as typeof fetch);
+    expect(r).toMatchObject({ ok: false, imported: 0 });
+    expect(r.error).toMatch(/Try again/);
+    _tune({});
+    const row = { id: 'r1', date: '2026-11-09', day: 'Chest+Back A', exercise: 'Smith flat press', kg: 60, reps: 8 };
+    expect(await importFromSheet(reply({ ok: true, log: [row], exercises: [] }))).toMatchObject({ ok: true, imported: 1 });
+    expect(await importFromSheet(reply({ ok: true, log: [row], exercises: [] }))).toMatchObject({ ok: true, imported: 0 });
   });
 
   it('importFromSheet reports ok and errors', async () => {

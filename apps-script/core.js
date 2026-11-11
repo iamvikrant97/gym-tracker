@@ -78,7 +78,7 @@ function ensureExercise(exRows, s) {
 }
 
 /**
- * Insert or update sets by id. Same id twice -> one row. New sets take the first free Log row.
+ * Insert or update sets by id. Same id twice -> one row. New sets go to the first free row after the last used one.
  * @param {any[][]} logRows
  * @param {any[][]} exercisesRows
  * @param {SetRow[]} sets
@@ -96,7 +96,11 @@ export function applyUpserts(logRows, exercisesRows, sets) {
     let idx = -1;
     for (let i = LOG_FIRST; i < log.length; i++) if (String(log[i][COL.id]) === String(s.id)) { idx = i; break; }
     if (idx === -1) {
-      for (let i = LOG_FIRST; i < log.length; i++) if (isFreeLogRow(log[i])) { idx = i; break; }
+      // Append after the last used row. Holes left by deletes are never filled: a new set placed in the middle
+      // of an older day would break the Sheet's row-order formulas (Set#, PR, Last time, Target).
+      let lastUsed = LOG_FIRST - 1;
+      for (let i = log.length - 1; i >= LOG_FIRST; i--) if (!isFreeLogRow(log[i])) { lastUsed = i; break; }
+      for (let i = lastUsed + 1; i < log.length; i++) if (isFreeLogRow(log[i])) { idx = i; break; }
     }
     if (idx === -1) {
       log.push(emptyLogRow());
@@ -186,4 +190,26 @@ export function readExercises(exercisesRows) {
     out.push({ slot: String(r[0] ?? ''), name: String(r[1]), muscle: String(r[3] ?? ''), repMin: Number(r[5]) || 8, repMax: Number(r[6]) || 12 });
   }
   return out;
+}
+
+/**
+ * First and last data row index where any of `cols` differs between `before` and `after`, or null if none.
+ * Lets doGet write all changed cells of a column block in ONE setValues call (fast enough for the first import
+ * of a long hand-typed Log), instead of one call per row.
+ * @param {any[][]} before
+ * @param {any[][]} after
+ * @param {number[]} cols
+ */
+export function changedSpan(before, after, cols) {
+  let start = -1;
+  let end = -1;
+  for (let i = LOG_FIRST; i < after.length; i++) {
+    const b = before[i] || [];
+    const a = after[i];
+    if (cols.some((c) => (blank(b[c]) ? '' : b[c]) !== (blank(a[c]) ? '' : a[c]))) {
+      if (start === -1) start = i;
+      end = i;
+    }
+  }
+  return start === -1 ? null : [start, end];
 }

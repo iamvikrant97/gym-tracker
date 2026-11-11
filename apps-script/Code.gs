@@ -82,7 +82,7 @@ function ensureExercise(exRows, s) {
 }
 
 /**
- * Insert or update sets by id. Same id twice -> one row. New sets take the first free Log row.
+ * Insert or update sets by id. Same id twice -> one row. New sets go to the first free row after the last used one.
  * @param {any[][]} logRows
  * @param {any[][]} exercisesRows
  * @param {SetRow[]} sets
@@ -100,7 +100,11 @@ function applyUpserts(logRows, exercisesRows, sets) {
     let idx = -1;
     for (let i = LOG_FIRST; i < log.length; i++) if (String(log[i][COL.id]) === String(s.id)) { idx = i; break; }
     if (idx === -1) {
-      for (let i = LOG_FIRST; i < log.length; i++) if (isFreeLogRow(log[i])) { idx = i; break; }
+      // Append after the last used row. Holes left by deletes are never filled: a new set placed in the middle
+      // of an older day would break the Sheet's row-order formulas (Set#, PR, Last time, Target).
+      let lastUsed = LOG_FIRST - 1;
+      for (let i = log.length - 1; i >= LOG_FIRST; i--) if (!isFreeLogRow(log[i])) { lastUsed = i; break; }
+      for (let i = lastUsed + 1; i < log.length; i++) if (isFreeLogRow(log[i])) { idx = i; break; }
     }
     if (idx === -1) {
       log.push(emptyLogRow());
@@ -191,6 +195,28 @@ function readExercises(exercisesRows) {
   }
   return out;
 }
+
+/**
+ * First and last data row index where any of `cols` differs between `before` and `after`, or null if none.
+ * Lets doGet write all changed cells of a column block in ONE setValues call (fast enough for the first import
+ * of a long hand-typed Log), instead of one call per row.
+ * @param {any[][]} before
+ * @param {any[][]} after
+ * @param {number[]} cols
+ */
+function changedSpan(before, after, cols) {
+  let start = -1;
+  let end = -1;
+  for (let i = LOG_FIRST; i < after.length; i++) {
+    const b = before[i] || [];
+    const a = after[i];
+    if (cols.some((c) => (blank(b[c]) ? '' : b[c]) !== (blank(a[c]) ? '' : a[c]))) {
+      if (start === -1) start = i;
+      end = i;
+    }
+  }
+  return start === -1 ? null : [start, end];
+}
 // ==== END CORE ====
 
 // ---------------------------------------------------------------------------------------------
@@ -246,18 +272,22 @@ function doGet(e) {
     const { logRows, assigned } = assignIds(filled.logRows, () => Utilities.getUuid());
     if (assigned || filled.filled) {
       const tz = tz_();
-      for (let i = LOG_FIRST; i < logRows.length; i++) {
-        const b = before[i];
-        if (!b) continue;
-        const a = logRows[i];
-        if (b[0] !== a[0] || b[1] !== a[1] || b[2] !== a[2]) {
-          const v = [a[0], a[1], a[2]].map((x, k) => (k === 0 && typeof x === 'string' && x ? Utilities.parseDate(x, tz, 'yyyy-MM-dd') : x));
-          logSheet.getRange(i + 1, 1, 1, 3).setValues([v]);
-        }
-        if (b[COL.id] !== a[COL.id]) logSheet.getRange(i + 1, COL.id + 1).setValue(a[COL.id]);
+      const toCell = (x, k) => (k === 0 && typeof x === 'string' && x ? Utilities.parseDate(x, tz, 'yyyy-MM-dd') : x);
+      // One write per column block (A-C, AB) covering only the changed rows: two calls instead of one per row.
+      const abc = changedSpan(before, logRows, [COL.date, COL.day, COL.exercise]);
+      if (abc) {
+        const vals = logRows.slice(abc[0], abc[1] + 1).map((r) => [r[0], r[1], r[2]].map(toCell));
+        logSheet.getRange(abc[0] + 1, 1, vals.length, 3).setValues(vals);
+      }
+      const ids = changedSpan(before, logRows, [COL.id]);
+      if (ids) {
+        const vals = logRows.slice(ids[0], ids[1] + 1).map((r) => [r[COL.id]]);
+        logSheet.getRange(ids[0] + 1, COL.id + 1, vals.length, 1).setValues(vals);
       }
       SpreadsheetApp.flush();
     }
+    // The set id column is for the app only.
+    if (!logSheet.isColumnHiddenByUser(COL.id + 1)) logSheet.hideColumns(COL.id + 1);
     const ex = readBlock_(ss.getSheetByName(EX_SHEET), 8, EX_FIRST + 1);
     return json_({ ok: true, log: readLog(logRows), exercises: readExercises(ex) });
   } catch (err) {
