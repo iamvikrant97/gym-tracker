@@ -8,8 +8,8 @@
   const ends = $derived(store.restEndsAt);
   /** The rest started when the last set was done. */
   const startAt = $derived(store.sets.reduce((m, s) => Math.max(m, s.doneAt), 0));
-  let skipped = $state<number | null>(null);
-  const open = $derived(store.active && ends !== null && skipped !== ends);
+  // Skip and +15 are saved on the workout by the store (they survive the app being killed).
+  const open = $derived(store.active && ends !== null);
 
   let now = $state(Date.now());
   // Never tick-counted: each frame reads the clock, so a backgrounded or reopened app is still right.
@@ -50,9 +50,8 @@
   });
 
   function addTime() {
-    if (store.restEndsAt === null) return;
     // Past zero, +15 counts from now rather than from the old end.
-    store.restEndsAt = Math.max(store.restEndsAt, Date.now()) + 15_000;
+    store.addRest(15).catch(() => undefined);
   }
 </script>
 
@@ -62,7 +61,7 @@
   <div class="lbl"><b>{over ? 'Rest over · go when ready' : 'Rest'}</b><span>{nextText}</span></div>
   <div class="ctl">
     <button type="button" class="press" aria-label="Add 15 seconds" onclick={addTime}>+15</button>
-    <button type="button" class="skip press" onclick={() => (skipped = ends)}>Skip</button>
+    <button type="button" class="skip press" onclick={() => store.skipRest().catch(() => undefined)}>Skip</button>
   </div>
 </div>
 
@@ -73,8 +72,9 @@
     background: rgba(26, 30, 38, 0.9); border: 1px solid rgba(255, 255, 255, 0.07);
     backdrop-filter: blur(20px) saturate(170%); -webkit-backdrop-filter: blur(20px) saturate(170%);
     transform: translateY(calc(100% + 140px)); transition: transform 420ms var(--ease-drawer);
+    pointer-events: none;
   }
-  .rest.open { transform: translateY(0); }
+  .rest.open { transform: translateY(0); pointer-events: auto; }
   .t { font: 700 30px/1 var(--display); font-variant-numeric: tabular-nums; min-width: 62px; transition: color 200ms var(--ease-out); }
   .rest.over .t { color: var(--amber); }
   .lbl { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); line-height: 1.3; }
@@ -82,7 +82,7 @@
   .lbl span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctl { display: flex; gap: 6px; }
   .ctl button { height: 48px; min-width: 48px; padding: 0 10px; border-radius: 11px; background: rgba(255, 255, 255, 0.06); font-size: 13px; }
-  .ctl .skip { background: var(--blue); color: #fff; font-weight: 600; }
+  .ctl .skip { background: var(--blue); color: var(--on-blue); font-weight: 600; }
   .bar { position: absolute; left: 14px; right: 14px; top: 0; height: 2px; overflow: hidden; border-radius: 2px; }
   .bar i { display: block; height: 100%; background: var(--blue); transform-origin: left; }
   .rest.over .bar i { background: var(--amber); }

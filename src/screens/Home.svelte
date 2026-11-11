@@ -1,7 +1,9 @@
 <script lang="ts">
   import { getAll, loadSettings, DEFAULT_SETTINGS } from '../lib/db';
   import { exerciseById, TEMPLATES } from '../lib/seed';
-  import { homeNotes, weekStart } from '../lib/stats';
+  import { homeNotes, visitKey, visitKeysInWeek } from '../lib/stats';
+  import { showToast } from '../ui/toast.svelte';
+  import { onMount } from 'svelte';
   import { nextSession } from '../lib/selection';
   import { workout, localDate } from '../lib/workout.svelte';
   import { estimateMinutes } from '../lib/workoutView';
@@ -16,17 +18,36 @@
   let picked = $state<SessionId | null>(null);
   let swapOpen = $state(false);
 
-  const now = Date.now();
-  const today = localDate(now);
+  // The app can sit open (or in the background) overnight: re-read the clock when it comes back and every minute.
+  let now = $state(Date.now());
+  onMount(() => {
+    const tick = () => {
+      const t = Date.now();
+      if (localDate(t) !== localDate(now)) load();
+      now = t;
+    };
+    const vis = () => document.visibilityState === 'visible' && tick();
+    document.addEventListener('visibilitychange', vis);
+    const timer = setInterval(tick, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', vis);
+      clearInterval(timer);
+    };
+  });
+  const today = $derived(localDate(now));
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const d = new Date(now);
-  const dateLabel = `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  const greeting = d.getHours() < 12 ? 'Morning' : d.getHours() < 17 ? 'Afternoon' : 'Evening';
+  const d = $derived(new Date(now));
+  const dateLabel = $derived(`${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`);
+  const greeting = $derived(d.getHours() < 12 ? 'Morning' : d.getHours() < 17 ? 'Afternoon' : 'Evening');
+  let starting = $state(false);
 
+  let loadSeq = 0;
   async function load() {
+    const seq = ++loadSeq;
     try {
       const [w, all, s] = await Promise.all([getAll<Workout>('workouts'), getAll<SetLog>('sets'), loadSettings()]);
+      if (seq !== loadSeq) return; // a newer load started: never let an older result overwrite it
       workouts = w;
       sets = all.filter((x) => !x.deleted);
       settings = s;
@@ -35,17 +56,24 @@
     }
   }
 
-  // Reload when a workout starts, ends or is restored.
+  // Reload when a workout starts, ends or is restored, or settings change (Settings screen).
   $effect(() => {
     void workout.current?.id;
     void workout.active;
+    void workout.settings;
     load();
   });
 
   const resuming = $derived(workout.active);
+  // A workout with no sets (discarded, or opened by mistake and closed) does not move the rotation on.
+  const counted = $derived.by(() => {
+    const withSets = new Set(sets.filter((x) => !x.warmup).map((x) => x.workoutId));
+    return workouts.filter((w) => withSets.has(w.id) || w.id === workout.current?.id);
+  });
   const sessionId = $derived<SessionId>(
-    resuming ? workout.current!.sessionId : (picked ?? nextSession(workouts, TEMPLATES)),
+    resuming ? workout.current!.sessionId : (picked ?? nextSession(counted, TEMPLATES)),
   );
+  const resumingEmpty = $derived(resuming && workout.sets.length === 0);
   const template = $derived(TEMPLATES.find((t) => t.id === sessionId)!);
 
   const effectiveId = (t: SessionTemplate, templateId: string) =>
@@ -66,8 +94,11 @@
   }
 
   const plan = $derived(describe(template));
-  const doneThisWeek = $derived(workouts.filter((w) => weekStart(w.date) === weekStart(today)).length);
-  const sessionNo = $derived(Math.max(1, resuming ? doneThisWeek : doneThisWeek + 1));
+  // Visits (date + session), so a long break that split one visit into two workouts still counts once.
+  const visits = $derived(visitKeysInWeek(workouts, sets, today));
+  const sessionNo = $derived(
+    Math.max(1, resuming && visits.has(visitKey(workout.current!)) ? visits.size : visits.size + 1),
+  );
   const notes = $derived(homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)));
 
   /** Splits a note into plain and emphasised parts (counts and ages read as the figures). */
@@ -79,8 +110,26 @@
   }
 
   async function start() {
-    if (!workout.active) await workout.startWorkout(sessionId);
-    location.hash = '#/workout';
+    if (starting || !workout.ready) return;
+    starting = true;
+    try {
+      if (!workout.active) await workout.startWorkout(sessionId);
+      location.hash = '#/workout';
+    } catch (e) {
+      showToast(e instanceof Error ? `Could not start: ${e.message}` : 'Could not start the workout');
+    } finally {
+      starting = false;
+    }
+  }
+
+  async function discard() {
+    try {
+      await workout.discard();
+      picked = null;
+      showToast('Workout discarded');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not discard');
+    }
   }
 
   function choose(id: SessionId) {
@@ -112,9 +161,11 @@
         <li><b>{i + 1}</b><span>{item.name}</span><span>{item.sets} sets</span></li>
       {/each}
     </ol>
-    <button class="start press" type="button" onclick={start}>{resuming ? 'Resume workout' : 'Start workout'}</button>
+    <button class="start btn-primary press" type="button" disabled={!workout.ready || starting} onclick={start}>{resuming ? 'Resume workout' : 'Start workout'}</button>
     {#if !resuming}
       <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Swap day</button>
+    {:else if resumingEmpty}
+      <button class="swapday" type="button" onclick={discard}>Discard workout (no sets yet)</button>
     {/if}
   </article>
 
@@ -159,7 +210,8 @@
   .ex-list li { display: flex; gap: 10px; font-size: 14px; }
   .ex-list li b { font: 600 13px/1.6 var(--display); color: var(--blue); min-width: 22px; }
   .ex-list li span:last-child { margin-left: auto; white-space: nowrap; color: var(--muted); font-size: 13px; }
-  .start { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border-radius: 14px; background: var(--blue); color: #fff; font-weight: 600; font-size: 16px; }
+  .start { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; transition: transform 160ms var(--ease-out), opacity 160ms; }
+  .start:disabled { opacity: 0.6; }
   .swapday { display: block; margin: 12px auto 0; min-height: 48px; padding: 0 16px; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
   .notes { margin-top: 18px; display: grid; gap: 8px; }
   .notes p { margin: 0; display: flex; gap: 10px; align-items: baseline; font-size: 13.5px; color: var(--muted); }
@@ -170,7 +222,7 @@
   .opt { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 12px; min-height: 56px; border-radius: 12px; text-align: left; }
   .nm { display: block; font-weight: 600; }
   .meta2 { display: block; font-size: 12px; color: var(--muted); }
-  .dot { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #3a404c; display: grid; place-items: center; flex: none; }
+  .dot { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--ring); display: grid; place-items: center; flex: none; }
   .opt[aria-checked='true'] { background: var(--raised); }
   .opt[aria-checked='true'] .dot { border-color: var(--blue); }
   .opt[aria-checked='true'] .dot::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); }

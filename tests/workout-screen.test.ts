@@ -237,8 +237,8 @@ describe('AdjustSheet hold-to-repeat', () => {
 describe('workout view maths', () => {
   it('estimate, finish time, drop set and clock', () => {
     // Chest + Back B: 12 compound sets (180 s) + 4 isolation sets (120 s).
-    expect(estimateMinutes([...Array(12).fill(180), ...Array(4).fill(120)])).toBe(60);
-    expect(finishAt(0, 30_000, [180, 120])).toBe(30_000 + (2 * 45 + 180) * 1000);
+    expect(estimateMinutes([...Array(12).fill(180), ...Array(4).fill(120)])).toBe(70);
+    expect(finishAt(0, 30_000, [180, 120])).toBe(30_000 + (2 * 80 + 180) * 1000);
     expect(dropSet(32.5, 2.5)).toBe(25);
     expect(fmtElapsed(65_000)).toBe('01:05');
     expect(fmtElapsed(3_725_000)).toBe('1:02:05');

@@ -180,7 +180,7 @@ describe('importFromSheet', () => {
 
   it('creates one CB-A workout, maps names to ids, adds unknowns as custom, and is not duplicated on a second run', async () => {
     const f = okFetch(data);
-    expect(await importFromSheet(f)).toEqual({ imported: 3 });
+    expect(await importFromSheet(f)).toMatchObject({ imported: 3 });
     expect(String(f.mock.calls[0][0])).toBe('https://script.example/exec?key=k3y');
     const ws = await getAll<Workout>('workouts');
     expect(ws).toHaveLength(1);
@@ -195,7 +195,7 @@ describe('importFromSheet', () => {
     expect(custom[0]).toMatchObject({ name: 'Mystery machine', slot: 'Other', muscle: 'Back' });
 
     const f2 = okFetch(data);
-    expect(await importFromSheet(f2)).toEqual({ imported: 0 });
+    expect(await importFromSheet(f2)).toMatchObject({ imported: 0 });
     expect(await sets()).toHaveLength(3);
     expect(await getAll('customExercises')).toHaveLength(1);
   });
@@ -214,12 +214,12 @@ describe('importFromSheet', () => {
     await flush(f);
     expect(bodyOf(f).upserts[0]).toMatchObject({ id: 'gen-1', reps: 11 });
     // second import is a no-op
-    expect(await importFromSheet(okFetch(withIds))).toEqual({ imported: 0 });
+    expect(await importFromSheet(okFetch(withIds))).toMatchObject({ imported: 0 });
     expect(await sets()).toHaveLength(2);
   });
 
   it('does not import when the bridge fails', async () => {
-    expect(await importFromSheet(okFetch({ ok: false, error: 'bad key' }))).toEqual({ imported: 0 });
+    expect(await importFromSheet(okFetch({ ok: false, error: 'bad key' }))).toMatchObject({ imported: 0 });
     expect(await sets()).toEqual([]);
   });
 
@@ -319,14 +319,14 @@ describe('import merges into an app that already has sets (M5, M7)', () => {
   it('adds only rows whose id is unknown, never duplicates, and is a no-op the second time', async () => {
     await put('sets', mk('mine', { date: '2026-11-09' }));
     const f1 = okFetch(rows(['h1', 'h2', 'mine']));
-    expect(await importFromSheet(f1)).toEqual({ imported: 2 });
+    expect(await importFromSheet(f1)).toMatchObject({ imported: 2 });
     expect((await sets()).map((x) => x.id).sort()).toEqual(['h1', 'h2', 'mine']);
-    expect(await importFromSheet(okFetch(rows(['h1', 'h2', 'mine'])))).toEqual({ imported: 0 });
+    expect(await importFromSheet(okFetch(rows(['h1', 'h2', 'mine'])))).toMatchObject({ imported: 0 });
     expect(await sets()).toHaveLength(3);
   });
   it('does not resurrect a set that was deleted locally (its id still exists)', async () => {
     await put('sets', mk('gone', { deleted: true }));
-    expect(await importFromSheet(okFetch(rows(['gone'])))).toEqual({ imported: 0 });
+    expect(await importFromSheet(okFetch(rows(['gone'])))).toMatchObject({ imported: 0 });
   });
   it('does not create custom exercises for rows it will not import', async () => {
     await put('sets', mk('gone'));

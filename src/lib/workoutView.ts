@@ -1,8 +1,8 @@
 import type { PlannedSet } from './workout.svelte';
 import type { SetLog } from './types';
 
-/** Seconds of work assumed per set in time estimates. */
-export const WORK_SEC = 45;
+/** Seconds per set in time estimates: the set itself plus loading plates and moving between machines. */
+export const WORK_SEC = 80;
 /** Fixed overhead added to a session estimate (setting up, walking between machines). */
 export const SETUP_SEC = 300;
 
@@ -94,7 +94,7 @@ export function remaining(cards: CardModel[]): RowModel[] {
   return cards.flatMap((c) => (c.orphan ? [] : c.rows.filter((r) => r.planned && !r.warmup && !r.done)));
 }
 
-/** Session length: every set's rest + ~45 s of work, plus 5 min, rounded to 5 min. */
+/** Session length: every set's rest + WORK_SEC, plus 5 min, rounded to 5 min (Chest + Back B is about 70). */
 export function estimateMinutes(restSecPerSet: number[]): number {
   const sec = restSecPerSet.reduce((n, r) => n + r + WORK_SEC, 0) + SETUP_SEC;
   return Math.max(5, Math.round(sec / 60 / 5) * 5);

@@ -13,7 +13,7 @@ const set = (date: string, exerciseId: string, kg: number, reps: number, o: Part
 const times = (c: number, f: () => SetLog) => Array.from({ length: c }, f);
 
 const settings: Settings = {
-  paused: false, weeklyTarget: 4, restOverrides: {}, stepOverrides: {}, pinnedPlaylists: [], templateOverrides: {},
+  paused: false, weeklyTarget: 4, restOverrides: {}, stepOverrides: {}, pinnedPlaylists: [], templateOverrides: {}, bodyKg: 65,
 };
 const workout = (date: string, o: Partial<Workout> = {}): Workout => ({
   id: `w-${date}`, date, sessionId: 'CB-A', startedAt: Date.parse(`${date}T07:00:00+05:30`), swaps: {}, ...o,

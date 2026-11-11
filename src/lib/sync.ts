@@ -99,19 +99,126 @@ export function flush(fetchFn: typeof fetch = (...a) => fetch(...a), opts: { kee
     return inFlight;
   }
   const run = async (): Promise<FlushResult> => {
-    let r = await doFlush(fetchFn, opts);
+    let r = await doFlush(fetchFn, opts).catch(() => ({ sent: 0, ok: false })); // storage error: nothing lost, retried later
     while (dirty && r.ok) {
       dirty = false;
-      const again = await doFlush(fetchFn, opts);
+      const again = await doFlush(fetchFn, opts).catch(() => ({ sent: 0, ok: false }));
       r = { sent: r.sent + again.sent, ok: again.ok };
     }
     return r;
   };
-  inFlight = run().finally(() => {
-    inFlight = null;
-    dirty = false;
-  });
+  inFlight = run()
+    .then(async (r) => {
+      if (r.ok) await put('settings', { key: SYNC_META, value: { at: Date.now() } }).catch(() => undefined);
+      return r;
+    })
+    .finally(() => {
+      inFlight = null;
+      dirty = false;
+      notify();
+    });
   return inFlight;
+}
+
+// ---- status for the UI ----------------------------------------------------------------------------
+
+const SYNC_META = 'syncMeta';
+const changeListeners = new Set<() => void>();
+/** Called after every flush and whenever a change is queued, so the UI can re-read syncStatus(). Returns unsubscribe. */
+export function onSyncChange(cb: () => void): () => void {
+  changeListeners.add(cb);
+  return () => changeListeners.delete(cb);
+}
+function notify() {
+  for (const cb of changeListeners) {
+    try {
+      cb();
+    } catch {
+      /* a listener must not break sync */
+    }
+  }
+}
+
+/** When the queue was last confirmed empty by a successful flush (epoch ms), or null. */
+export async function lastSyncAt(): Promise<number | null> {
+  return (await get<{ key: string; value: { at: number } }>('settings', SYNC_META))?.value?.at ?? null;
+}
+
+export type SyncState = 'synced' | 'pending' | 'offline' | 'attention' | 'not-set-up';
+
+const clock = (ms: number) => {
+  const d = new Date(ms);
+  const h = d.getHours();
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+};
+
+/** The short line Home shows next to the dot; warn turns the dot amber. */
+export function syncLabel(state: SyncState, lastAt: number | null): { text: string; warn: boolean } {
+  switch (state) {
+    case 'synced':
+      return { text: lastAt ? `Synced ${clock(lastAt)}` : 'Synced', warn: false };
+    case 'pending':
+      return { text: 'Saved on phone · syncing', warn: false };
+    case 'offline':
+      return { text: 'Offline · saved on phone', warn: true };
+    case 'attention':
+      return { text: 'Sheet needs a look', warn: true };
+    default:
+      return { text: 'Saved on phone', warn: false };
+  }
+}
+
+/** Plain-language problem with a script URL, or null if it looks like a deployed web app. */
+export function checkScriptUrl(url: string | undefined): string | null {
+  const u = (url ?? '').trim();
+  if (!u) return 'Paste the web app URL first';
+  if (!/^https:\/\//.test(u)) return 'The URL must start with https://';
+  if (/\/dev\/?$/.test(u)) return 'This is the test URL. Use the one from Deploy > New deployment (it ends in /exec)';
+  if (!/\/exec\/?$/.test(u)) return 'The URL should end in /exec';
+  return null;
+}
+
+type SheetData = { ok?: boolean; error?: string; log?: LogRow[]; exercises?: LibRow[] };
+type SheetGet = { ok: true; data: SheetData } | { ok: false; error: string };
+
+/** GET url?key=: reads the whole Log. The error text never contains the key. */
+async function getSheet(fetchFn: typeof fetch, url: string, key: string): Promise<SheetGet> {
+  const u = url.trim();
+  const sep = u.includes('?') ? '&' : '?';
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), Math.max(tuning.requestMs, 30_000)) : undefined;
+  let res: Response;
+  try {
+    res = await fetchFn(`${u}${sep}key=${encodeURIComponent(key.trim())}`, { redirect: 'follow', signal: ctrl?.signal });
+  } catch {
+    return { ok: false, error: 'Could not reach the script. Check the internet connection and the URL' };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (!res.ok) return { ok: false, error: `The script answered with an error (${res.status ?? 'HTTP'})` };
+  let data: SheetData;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, error: 'That URL did not answer like the script. Check "Who has access: Anyone" and that you copied the /exec URL' };
+  }
+  if (data?.ok === false) {
+    if (data.error === 'bad key') return { ok: false, error: 'The key does not match the one in the script' };
+    if (data.error === 'busy') return { ok: false, error: 'The Sheet is busy. Try again in a minute' };
+    return { ok: false, error: `The script reported a problem: ${String(data.error ?? 'unknown')}` };
+  }
+  if (!Array.isArray(data?.log)) return { ok: false, error: 'That URL did not answer like the script' };
+  return { ok: true, data };
+}
+
+/** Checks the saved URL and key against the script without changing anything in the app. */
+export async function testConnection(fetchFn: typeof fetch = (...a) => fetch(...a)): Promise<{ ok: true; rows: number } | { ok: false; error: string }> {
+  const s = await loadSettings();
+  const bad = checkScriptUrl(s.scriptUrl);
+  if (bad) return { ok: false, error: bad };
+  if (!s.scriptKey?.trim()) return { ok: false, error: 'Paste the key first' };
+  const r = await getSheet(fetchFn, s.scriptUrl!, s.scriptKey);
+  return r.ok ? { ok: true, rows: r.data.log!.length } : r;
 }
 
 const sortKey = (s: SetLog) => [s.date, s.doneAt, s.setNo] as const;
@@ -231,7 +338,7 @@ async function confirm(batch: QueueItem[], sentSets: Map<string, number>): Promi
   await tx.done;
 }
 
-export async function syncStatus(): Promise<'synced' | 'pending' | 'offline' | 'attention' | 'not-set-up'> {
+export async function syncStatus(): Promise<SyncState> {
   const s = await loadSettings();
   if (!s.scriptUrl || !s.scriptKey) return 'not-set-up';
   const queued = await getAll<QueueItem>('queue');
@@ -278,27 +385,20 @@ export function onImported(cb: (info: ImportInfo) => void): () => void {
  * Pulls the Log from the Sheet and merges it by set id: rows whose id the app already has (including deleted
  * ones) are skipped, so it is safe to run any time and any number of times.
  */
-export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(...a)): Promise<{ imported: number }> {
+export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(...a)): Promise<{ imported: number; ok: boolean; error?: string }> {
   const settings = await loadSettings();
-  if (!settings.scriptUrl || !settings.scriptKey) return { imported: 0 };
+  if (!settings.scriptUrl || !settings.scriptKey) return { imported: 0, ok: false, error: 'Add the script URL and key first' };
 
-  let data: { ok?: boolean; log?: LogRow[]; exercises?: LibRow[] };
-  try {
-    const sep = settings.scriptUrl.includes('?') ? '&' : '?';
-    const res = await fetchFn(`${settings.scriptUrl}${sep}key=${encodeURIComponent(settings.scriptKey)}`, { redirect: 'follow' });
-    if (!res.ok) return { imported: 0 };
-    data = await res.json();
-  } catch {
-    return { imported: 0 };
-  }
-  if (data?.ok === false || !Array.isArray(data?.log)) return { imported: 0 };
+  const got = await getSheet(fetchFn, settings.scriptUrl, settings.scriptKey);
+  if (!got.ok) return { imported: 0, ok: false, error: got.error };
+  const data = got.data as { log: LogRow[]; exercises?: LibRow[] };
 
   const idOf = (r: LogRow) => (r.id ? String(r.id) : '');
   const haveIds = new Set((await getAll<SetLog>('sets')).map((x) => x.id));
   const rows = data.log.filter(
     (r) => r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) && Number.isFinite(Number(r.reps)) && String(r.exercise ?? '').trim() && !haveIds.has(idOf(r)),
   );
-  if (rows.length === 0) return { imported: 0 };
+  if (rows.length === 0) return { imported: 0, ok: true };
 
   // name -> exercise, creating custom ones only for rows that will be imported.
   const known = new Map((await listExercises()).map((e) => [norm(e.name), e]));
@@ -361,7 +461,7 @@ export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(..
     const info = { imported, customExercises: await getAll<Exercise>('customExercises') };
     for (const cb of importListeners) cb(info);
   }
-  return { imported };
+  return { imported, ok: true };
 }
 
 // ---- auto sync -------------------------------------------------------------------------------
@@ -379,6 +479,7 @@ function scheduleRetry() {
 
 /** Call after a queue write. No-op until startAutoSync() has run. Debounced (2 s). */
 export function scheduleFlush(): void {
+  notify(); // something was queued: the status is no longer "Synced"
   if (!started) return;
   clearTimeout(debounce);
   debounce = setTimeout(() => void flush(), tuning.debounceMs);
@@ -388,6 +489,7 @@ export function startAutoSync(): void {
   if (started || typeof window === 'undefined') return;
   started = true;
   window.addEventListener('online', () => void flush());
+  window.addEventListener('offline', notify);
   // Leaving the page (switching to Spotify, closing the tab): send what is queued now, with keepalive.
   window.addEventListener('pagehide', () => void flush(undefined, { keepalive: true }));
   document.addEventListener('visibilitychange', () => {

@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { closeDb, put } from '../src/lib/db';
+import { closeDb, getAll, put } from '../src/lib/db';
+import { toasts, clearToast } from '../src/ui/toast.svelte';
 import { workout } from '../src/lib/workout.svelte';
 import Home from '../src/screens/Home.svelte';
 import Sheet from '../src/ui/Sheet.svelte';
@@ -36,6 +37,7 @@ beforeEach(async () => {
   location.hash = '';
   workout.current = null;
   workout.sets = [];
+  workout.ready = true; // App's restore() has finished
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 10, 12, 8, 30));
 });
@@ -53,9 +55,9 @@ describe('Home', () => {
     expect(screen.getByText('Straight-arm cable pulldown')).toBeTruthy();
     expect(screen.getByText('Thursday, 12 Nov')).toBeTruthy();
     expect(screen.getByText('Saved on phone')).toBeTruthy();
-    // 12 compound sets x (180 + 45) + 4 isolation sets x (120 + 45) + 5 min = 61 min -> 60.
-    expect(container.querySelector('.meta')?.textContent).toBe('16 sets · about 60 min');
-    expect(screen.getByText(/Today · session 4 of 4/)).toBeTruthy();
+    // 12 compound sets x (180 + 80) + 4 isolation sets x (120 + 80) + 5 min = 70.3 min -> 70.
+    expect(container.querySelector('.meta')?.textContent).toBe('16 sets · about 70 min');
+    expect(await screen.findByText(/Today · session 4 of 6/)).toBeTruthy();
     expect(screen.getByText(/sessions done this week/)).toBeTruthy();
   });
 
@@ -90,6 +92,67 @@ describe('Home', () => {
     await fireEvent.click(screen.getByRole('radio', { name: /Legs A/ }));
     expect(await screen.findByRole('heading', { name: 'Legs A' })).toBeTruthy();
     expect(screen.getByText('Leg press')).toBeTruthy();
+  });
+
+  it('Start is disabled until the store has restored', async () => {
+    workout.ready = false;
+    render(Home);
+    const btn = await screen.findByRole('button', { name: 'Start workout' });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    workout.ready = true;
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('a double tap on Start opens one workout', async () => {
+    await seedHistory();
+    render(Home);
+    await screen.findByRole('heading', { name: 'Chest + Back B' });
+    const btn = screen.getByRole('button', { name: 'Start workout' });
+    await Promise.all([fireEvent.click(btn), fireEvent.click(btn)]);
+    await waitFor(() => expect(location.hash).toBe('#/workout'));
+    const open = (await getAll<Workout>('workouts')).filter((w) => w.endedAt === undefined);
+    expect(open).toHaveLength(1);
+  });
+
+  it('a failed start shows a toast', async () => {
+    vi.spyOn(workout, 'startWorkout').mockRejectedValueOnce(new Error('disk full'));
+    render(Home);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Start workout' }));
+    await waitFor(() => expect(toasts.message).toBe('Could not start: disk full'));
+    clearToast();
+  });
+
+  it('an empty workout opened by mistake can be discarded', async () => {
+    await seedHistory();
+    await workout.startWorkout('CB-B', Date.now());
+    render(Home);
+    await fireEvent.click(await screen.findByRole('button', { name: /Discard workout/ }));
+    expect(await screen.findByRole('button', { name: 'Start workout' })).toBeTruthy();
+    expect((await getAll<Workout>('workouts')).some((w) => w.sessionId === 'CB-B')).toBe(false);
+  });
+
+  it('the date refreshes when the app comes back the next day', async () => {
+    render(Home);
+    expect(await screen.findByText('Thursday, 12 Nov')).toBeTruthy();
+    vi.setSystemTime(new Date(2026, 10, 13, 6, 30));
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(await screen.findByText('Friday, 13 Nov')).toBeTruthy();
+    expect(screen.getByText('Morning, Vik')).toBeTruthy();
+  });
+
+  it('a long break that split one visit counts as one session', async () => {
+    await seedHistory();
+    // 12 Nov CB-B split in two by a 40-minute break.
+    for (const [id, h, m] of [['a', 7, 0], ['b', 7, 45]] as const) {
+      await put('workouts', { id: `cb-${id}`, date: day(12), sessionId: 'CB-B', startedAt: at(12, h) + m * 60_000, endedAt: at(12, 9), swaps: {} } satisfies Workout);
+      await put('sets', {
+        id: `x${id}`, workoutId: `cb-${id}`, date: day(12), sessionId: 'CB-B', exerciseId: 'converging-chest-press', setNo: 1, kg: 40, reps: 10,
+        warmup: false, feltIt: false, doneAt: at(12, h) + (m + 1) * 60_000, updatedAt: 0, deleted: false, synced: true,
+      } satisfies SetLog);
+    }
+    render(Home);
+    expect(await screen.findByText(/Today · session 5 of 6/)).toBeTruthy();
+    expect(screen.getByText(/sessions done this week/).closest('p')?.textContent).toContain('4 of 6');
   });
 
   it('settings gear opens #/settings', async () => {

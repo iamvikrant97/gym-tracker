@@ -273,7 +273,7 @@
   .group { font: 600 12px/1 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 4px; }
   .list-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 0; min-height: 56px; border-bottom: 1px solid var(--line); text-align: left; }
   .list-row .nm { font-weight: 500; }
-  .flag { margin-left: auto; font-size: 12px; font-weight: 600; padding: 5px 8px; border-radius: 7px; background: var(--blue); color: #fff; white-space: nowrap; }
+  .flag { margin-left: auto; font-size: 12px; font-weight: 600; padding: 5px 8px; border-radius: 7px; background: var(--blue); color: var(--on-blue); white-space: nowrap; }
   .flag.keep { background: var(--raised); color: var(--muted); font-weight: 500; }
   .add { display: flex; align-items: center; min-height: 48px; padding: 0 2px; font-size: 14px; color: var(--blue); }
   .ex-mini { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }

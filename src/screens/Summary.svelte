@@ -1,18 +1,28 @@
 <script lang="ts">
   import { workout } from '../lib/workout.svelte';
   import { TEMPLATES } from '../lib/seed';
-  import { workoutSummary } from '../lib/stats';
+  import { getAll } from '../lib/db';
+  import { mergeVisit, workoutSummary } from '../lib/stats';
   import { fmtClock } from '../lib/workoutView';
-  import type { Settings } from '../lib/types';
+  import type { Workout } from '../lib/types';
 
-  /** Body weight used for the calorie estimate (Vik, Nov 2026). A Settings `bodyKg`, when present, wins. */
+  /** Body weight for the calorie estimate when Settings has none. Settings > Training > Body weight wins. */
   const DEFAULT_BODY_KG = 65;
 
   let { bodyKg }: { bodyKg?: number } = $props();
 
-  const w = $derived(workout.current);
-  const kg = $derived(bodyKg ?? (workout.settings as (Settings & { bodyKg?: number }) | null)?.bodyKg ?? DEFAULT_BODY_KG);
-  const s = $derived(w ? workoutSummary(w, [...workout.history, ...workout.sets], kg, (id) => workout.exercise(id)) : null);
+  // Other workouts of the same visit (a break > 15 min splits one gym visit into two workouts).
+  let workouts = $state.raw<Workout[]>([]);
+  $effect(() => {
+    void workout.current?.id;
+    void workout.current?.endedAt;
+    getAll<Workout>('workouts').then((all) => (workouts = all)).catch(() => undefined);
+  });
+
+  const visit = $derived(workout.current ? mergeVisit(workout.current, workouts, [...workout.history, ...workout.sets]) : null);
+  const w = $derived(visit?.workout ?? null);
+  const kg = $derived(bodyKg ?? workout.settings?.bodyKg ?? DEFAULT_BODY_KG);
+  const s = $derived(w && visit ? workoutSummary(w, visit.sets, kg, (id) => workout.exercise(id)) : null);
   const name = $derived(w ? (TEMPLATES.find((t) => t.id === w.sessionId)?.name ?? 'Workout') : '');
   const work = $derived(s ? Math.round(s.workRatio * 100) : 0);
 
@@ -80,5 +90,5 @@
   .badge { font: 600 11px/1 var(--body); color: #1a1406; background: var(--amber); border-radius: 4px; padding: 3px 5px; margin-right: 8px; }
   .kcal .big { font: 700 26px/1 var(--display); font-variant-numeric: tabular-nums; }
   .kcal p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
-  .done { display: block; width: 100%; height: 56px; margin-top: 20px; border-radius: 14px; background: var(--blue); color: #fff; font-weight: 600; font-size: 16px; }
+  .done { display: block; width: 100%; height: 56px; margin-top: 20px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; }
 </style>

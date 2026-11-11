@@ -43,7 +43,7 @@ describe('Week', () => {
 
   it('shows weekly sessions against the target and per-muscle freshness', async () => {
     render(Week);
-    await waitFor(() => expect(screen.getByText('3 / 4')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('3 / 6')).toBeTruthy());
     expect(screen.getByText('Trained yesterday')).toBeTruthy(); // Quads (leg press, 11 Nov)
     expect(screen.getAllByText('Not trained yet').length).toBeGreaterThan(0);
   });

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { DEFAULT_SETTINGS, getAll, loadSettings } from '../lib/db';
   import { exerciseById } from '../lib/seed';
-  import { daysSince, weekStart, weeklySets } from '../lib/stats';
+  import { daysSince, visitKeysInWeek, weekStart, weeklySets } from '../lib/stats';
   import type { Exercise, Muscle, SetLog, Settings, Workout } from '../lib/types';
   import { localDate, workout } from '../lib/workout.svelte';
 
@@ -42,11 +42,8 @@
 
   const counts = $derived(weeklySets(sets, today, lookup));
   const trainedDays = $derived(new Set(sets.filter((s) => !s.warmup).map((s) => s.date)));
-  const sessionsDone = $derived.by(() => {
-    const start = weekStart(today);
-    const withSets = new Set(sets.filter((s) => !s.warmup).map((s) => s.workoutId));
-    return workouts.filter((w) => weekStart(w.date) === start && withSets.has(w.id)).length;
-  });
+  // One gym visit counts once even if a long break split it into two workouts.
+  const sessionsDone = $derived(visitKeysInWeek(workouts, sets, today).size);
 
   const calendar = $derived.by(() => {
     const first = Date.parse(`${weekStart(today)}T00:00:00Z`) - (WEEKS - 1) * 7 * DAY_MS;
@@ -149,7 +146,7 @@
   .cal-days, .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .cal-days { font-size: 11px; text-align: center; margin-bottom: 6px; }
   .day { aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--muted); font: 500 12px/1 var(--display); font-variant-numeric: tabular-nums; }
-  .day.on { background: var(--blue); color: #fff; font-weight: 700; }
+  .day.on { background: var(--blue); color: var(--on-blue); font-weight: 700; }
   .day.today:not(.on) { outline: 1px solid var(--blue); outline-offset: -1px; color: var(--text); }
   .day.future { opacity: 0.35; }
 </style>

@@ -93,11 +93,13 @@
   });
 
   // ---- completing ----
+  /** Confirmed once, saved in IndexedDB settings (the localStorage flag of older builds still counts). */
   function perArmOk(): boolean {
+    if (workout.settings?.perArmConfirmed) return true;
     try {
       return localStorage.getItem(PER_ARM_KEY) === '1';
     } catch {
-      return true;
+      return false;
     }
   }
   let perArmAsk = $state<{ cardKey: string; rowKey: string; kg: number; reps: number } | null>(null);
@@ -127,14 +129,15 @@
       else if (pr) showToast(`New PR · ${c.ex?.name ?? 'exercise'}`);
     } catch (e) {
       console.error(e);
+      showToast('Could not save the set. Try again');
     }
   }
 
-  function confirmPerArm() {
+  async function confirmPerArm() {
     try {
-      localStorage.setItem(PER_ARM_KEY, '1');
+      await workout.updateSettings({ perArmConfirmed: true });
     } catch {
-      /* private mode: ask again next time */
+      /* storage error: ask again next time */
     }
     perArmOpen = false;
     const ask = perArmAsk;
@@ -258,8 +261,22 @@
   }
 
   async function finish() {
-    if (workout.active) await workout.finish();
-    location.hash = '#/summary';
+    try {
+      if (workout.active) await workout.finish();
+      location.hash = '#/summary';
+    } catch {
+      showToast('Could not finish. Try again');
+    }
+  }
+
+  async function discard() {
+    try {
+      await workout.discard();
+      location.hash = '#/';
+      showToast('Workout discarded');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not discard');
+    }
   }
 
   const nextName = (c: CardView, r: RowView) => !!next && next.exerciseId === c.exerciseId && next.setNo === r.setNo && !r.warmup;
@@ -346,6 +363,9 @@
 
     {#if workout.active}
       <button class="finish press" class:ready={progress.total > 0 && progress.done >= progress.total} type="button" onclick={finish}>Finish workout</button>
+      {#if workout.sets.length === 0}
+        <button class="discard" type="button" onclick={discard}>Discard workout (no sets yet)</button>
+      {/if}
     {:else}
       <button class="finish ready press" type="button" onclick={finish}>See summary</button>
     {/if}
@@ -432,13 +452,14 @@
     display: block; width: 100%; height: 56px; margin-top: 24px; border-radius: 14px; background: var(--raised);
     font-weight: 600; color: var(--muted); transition: background 300ms var(--ease-out), color 300ms var(--ease-out);
   }
-  .finish.ready { background: var(--blue); color: #fff; }
+  .finish.ready { background: var(--blue); color: var(--on-blue); }
+  .discard { display: block; margin: 12px auto 0; min-height: 48px; padding: 0 16px; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
   .undo {
     position: fixed; left: 50%; top: 14px; z-index: 31; transform: translateX(-50%); display: flex; align-items: center; gap: 14px;
     width: min(408px, calc(100% - 32px)); padding: 4px 4px 4px 16px; border-radius: 14px; background: var(--raised);
     border: 1px solid rgba(255, 255, 255, 0.08); font-size: 14px; animation: drop 380ms var(--ease-drawer);
   }
-  .undo button { margin-left: auto; height: 48px; padding: 0 18px; border-radius: 11px; background: var(--blue); color: #fff; font-weight: 600; }
+  .undo button { margin-left: auto; height: 48px; padding: 0 18px; border-radius: 11px; background: var(--blue); color: var(--on-blue); font-weight: 600; }
   @keyframes drop { from { transform: translate(-50%, -140%); } }
   @media (prefers-reduced-motion: reduce) {
     .seg::after { transform: none; opacity: 0; transition: opacity 200ms ease; }

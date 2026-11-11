@@ -59,6 +59,11 @@ export interface Workout {
   endedAt?: number;
   /** template exerciseId -> chosen exerciseId for this workout */
   swaps: Record<string, string>;
+  /**
+   * Rest changed by hand (+15 or Skip) after the set done at `after` (its doneAt). endsAt null = skipped.
+   * Ignored once another set is done, so the next rest starts from the exercise default again.
+   */
+  rest?: { after: number; endsAt: number | null };
 }
 
 export interface Settings {
@@ -70,6 +75,10 @@ export interface Settings {
   restOverrides: Record<string, number>;
   stepOverrides: Record<string, number>;
   pinnedPlaylists: string[];
+  /** Body weight in kg, used for the calorie estimate. */
+  bodyKg: number;
+  /** The one-time "weight per arm" note was confirmed. */
+  perArmConfirmed?: boolean;
   /** permanent swaps */
   templateOverrides: Partial<Record<SessionId, Record<string, string>>>;
 }

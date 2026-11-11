@@ -110,7 +110,7 @@
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 18px; }
   .chip { height: 48px; padding: 0 16px; border-radius: 24px; background: var(--raised); font-size: 13.5px; }
   .chip:disabled { opacity: 0.4; }
-  .save { width: 100%; height: 56px; border-radius: 14px; background: var(--blue); color: #fff; font-weight: 600; font-size: 16px; }
+  .save { width: 100%; height: 56px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; }
   @media (prefers-reduced-motion: reduce) {
     .sb { transition: background 120ms; }
     .sb:active { transform: none; }

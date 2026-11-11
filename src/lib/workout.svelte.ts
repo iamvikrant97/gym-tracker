@@ -1,5 +1,5 @@
 import {
-  addCustomExercise, get, getAll, getAllFromIndex, loadSettings, mergedSwapOptions, put, putAll, updateSettings,
+  addCustomExercise, del, get, getAll, getAllFromIndex, loadSettings, mergedSwapOptions, put, putAll, updateSettings,
 } from './db';
 import type { QueueItem } from './db';
 import { scheduleFlush } from './sync';
@@ -37,6 +37,8 @@ export class WorkoutStore {
   restEndsAt = $state.raw<number | null>(null);
   settings = $state.raw<Settings | null>(null);
   customExercises = $state.raw<Exercise[]>([]);
+  /** True once the first restore() has finished (successfully or not): Home must not start a workout before. */
+  ready = $state(false);
   /** Sets from every other workout (deleted ones excluded). */
   history: SetLog[] = [];
 
@@ -94,10 +96,29 @@ export class WorkoutStore {
     this.history = all.filter((s) => live(s) && s.workoutId !== workoutId);
   }
 
+  #lastDone(): SetLog | null {
+    return this.sets.reduce<SetLog | null>((a, s) => (!a || s.doneAt > a.doneAt ? s : a), null);
+  }
+
   #recomputeRest() {
     const open = this.active;
-    const last = this.sets.reduce<SetLog | null>((a, s) => (!a || s.doneAt > a.doneAt ? s : a), null);
-    this.restEndsAt = open && last ? last.doneAt + this.restSecFor(last.exerciseId) * 1000 : null;
+    const last = this.#lastDone();
+    if (!open || !last) {
+      this.restEndsAt = null;
+      return;
+    }
+    // +15 / Skip are saved on the workout and apply only to the rest after the set they were made on.
+    const manual = this.current?.rest;
+    this.restEndsAt = manual && manual.after === last.doneAt ? manual.endsAt : last.doneAt + this.restSecFor(last.exerciseId) * 1000;
+  }
+
+  /** Re-reads settings, custom exercises and history (after an import from the Sheet or a backup restore). */
+  refreshShared(): Promise<void> {
+    return this.#run(async () => {
+      await this.#loadShared();
+      await this.#loadHistory(this.current?.id ?? null);
+      this.#recomputeRest();
+    });
   }
 
   async #endWorkout(w: Workout, endedAt: number): Promise<Workout> {
@@ -128,11 +149,64 @@ export class WorkoutStore {
     return w;
   }
 
+  /** Opens a workout. If one of the same session is already open (a double tap), that one is returned. */
   startWorkout(sessionId: SessionId, now: number = Date.now()): Promise<Workout> {
     return this.#run(async () => {
+      if (this.active && this.current!.sessionId === sessionId) return this.current!;
       await this.#loadShared();
       return this.#begin(sessionId, now);
     });
+  }
+
+  /** Same session and swaps as the most recent workout. */
+  repeatLast(now: number = Date.now()): Promise<Workout> {
+    return this.#run(async () => {
+      const all = (await getAll<Workout>('workouts')).sort((a, b) => b.startedAt - a.startedAt);
+      const last = all[0];
+      if (!last) throw new Error('No workout to repeat yet');
+      await this.#loadShared();
+      return this.#begin(last.sessionId, now, last.swaps);
+    });
+  }
+
+  /** Deletes the open workout when no set was logged in it (started by mistake). Throws if it has sets. */
+  discard(): Promise<void> {
+    return this.#run(async () => {
+      const w = this.current;
+      if (!w || w.endedAt !== undefined) throw new Error('No workout in progress');
+      const logged = (await getAllFromIndex<SetLog>('sets', 'workoutId', w.id)).filter(live);
+      if (logged.length > 0) throw new Error('This workout has sets: finish it instead');
+      await del('workouts', w.id);
+      this.current = null;
+      this.sets = [];
+      this.restEndsAt = null;
+      await this.#loadHistory(null);
+    });
+  }
+
+  /** Adds time to the running rest (from now if it is already over). Saved, so it survives a restart. */
+  addRest(sec: number, now: number = Date.now()): Promise<void> {
+    return this.#run(async () => {
+      const last = this.#lastDone();
+      if (!this.active || !last || this.restEndsAt === null) return;
+      await this.#saveRest({ after: last.doneAt, endsAt: Math.max(this.restEndsAt, now) + sec * 1000 });
+    });
+  }
+
+  /** Hides the rest timer until the next set. Saved, so it survives a restart. */
+  skipRest(): Promise<void> {
+    return this.#run(async () => {
+      const last = this.#lastDone();
+      if (!this.active || !last) return;
+      await this.#saveRest({ after: last.doneAt, endsAt: null });
+    });
+  }
+
+  async #saveRest(rest: { after: number; endsAt: number | null }) {
+    const updated: Workout = { ...this.current!, rest };
+    await put('workouts', updated);
+    this.current = updated;
+    this.#recomputeRest();
   }
 
   /**
@@ -182,6 +256,8 @@ export class WorkoutStore {
       this.sets = shown?.sets ?? [];
       await this.#loadHistory(this.current?.id ?? null);
       this.#recomputeRest();
+    }).finally(() => {
+      this.ready = true;
     });
   }
 

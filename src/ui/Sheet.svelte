@@ -148,8 +148,9 @@
     background: var(--surface); border: 1px solid var(--line); border-bottom: 0;
     border-radius: 22px 22px 0 0; padding: 8px 18px 26px; outline: none;
     transform: translate(-50%, 100%); transition: transform 420ms var(--ease-drawer);
+    pointer-events: none; /* explicit: a sheet inside the pointer-events:none dock must still work when open */
   }
-  .sheet.open { transform: translate(-50%, 0); }
+  .sheet.open { transform: translate(-50%, 0); pointer-events: auto; }
   .head { touch-action: none; }
   .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--ring); margin: 4px auto 14px; }
   h2 { font: 800 21px/1.15 var(--body); margin: 0 0 4px; }

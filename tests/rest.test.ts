@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { closeDb } from '../src/lib/db';
 import { WorkoutStore, workout } from '../src/lib/workout.svelte';
@@ -71,11 +71,16 @@ describe('RestDock', () => {
   it('+15 adds time; Skip hides the dock until the next set', async () => {
     const { store, dock, time } = await dockAfter('converging-chest-press');
     await fireEvent.click(screen.getByRole('button', { name: 'Add 15 seconds' }));
-    flushSync();
-    expect(time()).toBe('3:15');
+    await waitFor(() => {
+      flushSync();
+      expect(time()).toBe('3:15');
+    });
     await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
-    flushSync();
-    expect(dock.classList.contains('open')).toBe(false);
+    await waitFor(() => {
+      flushSync();
+      expect(dock.classList.contains('open')).toBe(false);
+    });
+    advance(1000);
     await store.completeSet('converging-chest-press', 2, 40, 10, Date.now());
     flushSync();
     expect(dock.classList.contains('open')).toBe(true);

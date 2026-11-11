@@ -97,11 +97,39 @@ export function muscleTrend(sets: SetLog[], muscle: Muscle, today: string, looku
   return Math.round(mean(changes) * 10) / 10;
 }
 
-export function homeNotes(sets: SetLog[], workouts: Workout[], s: Settings, today: string, lookup: ExerciseLookup = exerciseById): string[] {
+/**
+ * One gym visit = same date + same session. A break of more than 15 min auto-ends a workout and the next set
+ * opens a second workout of the same session, so counts must use visits, not workout records.
+ */
+export const visitKey = (w: Pick<Workout, 'date' | 'sessionId'>) => `${w.date}|${w.sessionId}`;
+
+/** Visits in the week of `today` that have at least one working set. */
+export function visitKeysInWeek(workouts: Workout[], sets: SetLog[], today: string): Set<string> {
   const start = weekStart(today);
   // A workout with no logged sets (started, then abandoned) is not a session done.
   const hasSets = new Set(sets.filter(working).map((x) => x.workoutId));
-  const done = workouts.filter((w) => weekStart(w.date) === start && hasSets.has(w.id)).length;
+  return new Set(workouts.filter((w) => weekStart(w.date) === start && hasSets.has(w.id)).map(visitKey));
+}
+
+/**
+ * The whole visit `w` belongs to: every workout of the same date and session, merged into one (earliest start,
+ * latest end, open if any part is open), with their sets relabelled to `w.id`. `sets` may hold any other sets too.
+ */
+export function mergeVisit(w: Workout, workouts: Workout[], sets: SetLog[]): { workout: Workout; sets: SetLog[] } {
+  const parts = workouts.filter((x) => x.id === w.id || visitKey(x) === visitKey(w));
+  if (!parts.some((x) => x.id === w.id)) parts.push(w);
+  const ids = new Set(parts.map((x) => x.id));
+  const open = parts.some((x) => x.endedAt === undefined);
+  const merged: Workout = {
+    ...w,
+    startedAt: Math.min(...parts.map((x) => x.startedAt)),
+    endedAt: open ? undefined : Math.max(...parts.map((x) => x.endedAt!)),
+  };
+  return { workout: merged, sets: sets.map((x) => (ids.has(x.workoutId) && x.workoutId !== w.id ? { ...x, workoutId: w.id } : x)) };
+}
+
+export function homeNotes(sets: SetLog[], workouts: Workout[], s: Settings, today: string, lookup: ExerciseLookup = exerciseById): string[] {
+  const done = visitKeysInWeek(workouts, sets, today).size;
   const notes = [`${done} of ${s.weeklyTarget} sessions done this week`];
   if (!s.paused) {
     const ages = (['Quads', 'Hamstrings', 'Calves'] as const)

@@ -83,6 +83,6 @@
   .seg button { height: 44px; border-radius: 9px; font-size: 14px; color: var(--muted); }
   .seg button[aria-checked='true'] { background: var(--raised); color: var(--text); }
   .err { margin: 0; color: var(--amber); font-size: 13px; }
-  .save { height: 56px; border-radius: 14px; background: var(--blue); color: #fff; font-weight: 600; font-size: 16px; }
+  .save { height: 56px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; }
   .save:disabled { opacity: 0.6; }
 </style>

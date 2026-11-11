@@ -14,7 +14,8 @@ export interface QueueItem {
 
 export const DEFAULT_SETTINGS: Settings = {
   paused: false,
-  weeklyTarget: 4,
+  weeklyTarget: 6, // Mon-Sat
+  bodyKg: 65,
   restOverrides: {},
   stepOverrides: {},
   pinnedPlaylists: [],
@@ -59,6 +60,10 @@ export async function get<T>(store: StoreName, key: IDBValidKey): Promise<T | un
 
 export async function put(store: StoreName, value: unknown): Promise<void> {
   await (await openDb()).put(store, value);
+}
+
+export async function del(store: StoreName, key: IDBValidKey): Promise<void> {
+  await (await openDb()).delete(store, key);
 }
 
 export async function getAllFromIndex<T>(store: 'sets', index: 'exerciseId' | 'workoutId', key: IDBValidKey): Promise<T[]> {

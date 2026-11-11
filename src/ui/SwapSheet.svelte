@@ -88,7 +88,7 @@
   .opt:disabled { opacity: 0.45; }
   .nm { display: block; font-weight: 500; }
   .meta { display: block; font-size: 12px; color: var(--muted); }
-  .dot { margin-left: auto; flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #3a404c; display: grid; place-items: center; }
+  .dot { margin-left: auto; flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--ring); display: grid; place-items: center; }
   .opt[aria-checked='true'] { background: var(--raised); }
   .opt[aria-checked='true'] .dot { border-color: var(--blue); }
   .opt[aria-checked='true'] .dot::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); }
