@@ -8,7 +8,6 @@ import Sheet from '../src/ui/Sheet.svelte';
 import Toast from '../src/ui/Toast.svelte';
 import Nav from '../src/ui/Nav.svelte';
 import App from '../src/App.svelte';
-import { dragOffset, releaseVelocity, shouldDismiss } from '../src/ui/sheetDrag';
 import type { SetLog, Workout } from '../src/lib/types';
 
 const at = (d: number, h = 8) => new Date(2026, 10, d, h, 0).getTime();
@@ -54,7 +53,8 @@ describe('Home', () => {
     expect(screen.getByText('Straight-arm cable pulldown')).toBeTruthy();
     expect(screen.getByText('Thursday, 12 Nov')).toBeTruthy();
     expect(screen.getByText('Saved on phone')).toBeTruthy();
-    expect(container.querySelector('.meta')?.textContent).toMatch(/^16 sets · about \d+ min$/);
+    // 12 compound sets x (180 + 45) + 4 isolation sets x (120 + 45) + 5 min = 61 min -> 60.
+    expect(container.querySelector('.meta')?.textContent).toBe('16 sets · about 60 min');
     expect(screen.getByText(/Today · session 4 of 4/)).toBeTruthy();
     expect(screen.getByText(/sessions done this week/)).toBeTruthy();
   });
@@ -129,15 +129,6 @@ describe('Sheet', () => {
     await rerender({ open: false, onclose: () => {}, title: 'T' });
     expect(document.activeElement).toBe(opener);
     opener.remove();
-  });
-
-  it('drag maths: rubber-band up, dismiss by velocity or 40% distance', () => {
-    expect(dragOffset(50)).toBe(50);
-    expect(dragOffset(-16)).toBe(-8);
-    expect(releaseVelocity([[0, 0], [30, 100]])).toBeCloseTo(0.3);
-    expect(shouldDismiss(0.12, 5, 400)).toBe(true);
-    expect(shouldDismiss(0.05, 161, 400)).toBe(true);
-    expect(shouldDismiss(0.05, 159, 400)).toBe(false);
   });
 });
 

@@ -27,3 +27,5 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 }
 .screen { max-width: 440px; margin: 0 auto; padding: 0 16px 190px; min-height: 100%; }
 .page-title { font: 800 32px/1.05 var(--body); letter-spacing: -0.02em; margin: 26px 0 16px; }
+.btn-primary { background: var(--blue); color: var(--on-blue); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

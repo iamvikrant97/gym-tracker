@@ -17,13 +17,16 @@
   });
 </script>
 
-<div class="toast" class:show={shown} role="status" aria-live="polite">{text}</div>
+<!-- The visible toast is decorative; the live region carries the text only while shown. -->
+<div class="toast" class:show={shown} aria-hidden="true">{text}</div>
+<div class="sr-only" role="status" aria-live="polite">{shown ? text : ''}</div>
 
 <style>
   .toast {
     position: fixed; left: 50%; top: 14px; z-index: 30; transform: translate(-50%, -140%);
     transition: transform 380ms var(--ease-drawer); background: var(--amber); color: #1a1406;
-    font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 12px; white-space: nowrap;
+    font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 12px;
+    width: max-content; max-width: calc(100vw - 32px); text-align: center;
     pointer-events: none;
   }
   .toast.show { transform: translate(-50%, 0); }
