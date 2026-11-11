@@ -25,3 +25,5 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   .press { transition: opacity 120ms linear; }
   .press:active { transform: none; opacity: 0.7; }
 }
+.screen { max-width: 440px; margin: 0 auto; padding: 0 16px 190px; min-height: 100%; }
+.page-title { font: 800 32px/1.05 var(--body); letter-spacing: -0.02em; margin: 26px 0 16px; }
