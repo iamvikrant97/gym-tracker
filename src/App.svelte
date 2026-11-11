@@ -7,6 +7,9 @@
   import Progress from './screens/Progress.svelte';
   import Week from './screens/Week.svelte';
   import Workout from './screens/Workout.svelte';
+  import Summary from './screens/Summary.svelte';
+  import RestDock from './ui/RestDock.svelte';
+  import { watchWorkout } from './lib/session.svelte';
   import Nav from './ui/Nav.svelte';
   import SpotifyBar from './ui/SpotifyBar.svelte';
   import Toast from './ui/Toast.svelte';
@@ -23,13 +26,14 @@
    * Unregistered routes show a placeholder.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout };
+  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout, summary: Summary };
   const Screen = $derived(screens[route]);
   const showNav = $derived(['home', 'workout', 'progress', 'week'].includes(route));
 
   onMount(() => {
     workout.restore().catch(() => undefined);
   });
+  onMount(() => watchWorkout(workout));
 </script>
 
 <svelte:window onhashchange={() => (route = parseRoute(location.hash))} />
@@ -48,6 +52,7 @@
 {#if showNav}
   <!-- Dock stack, bottom up: nav, then (later tasks) the Spotify bar and rest timer above it. -->
   <div class="dock">
+    <RestDock />
     {#if route === 'home' || route === 'workout'}<SpotifyBar />{/if}
     <Nav {route} workoutActive={workout.active} />
   </div>
