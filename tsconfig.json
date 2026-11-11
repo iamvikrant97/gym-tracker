@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "types": ["node", "svelte", "vite/client", "vite-plugin-pwa/client"]
+    "types": ["node", "vitest/globals", "svelte", "vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["src/**/*.ts", "src/**/*.svelte", "tests/**/*.ts", "vite.config.ts"]
 }

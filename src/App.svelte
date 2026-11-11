@@ -1,8 +1,5 @@
 <script lang="ts">
-  export function parseRoute(hash: string): string {
-    if (hash === '' || hash === '#' || hash === '#/') return 'home';
-    return hash.replace(/^#\//, '').split('/')[0] || 'home';
-  }
+  import { parseRoute } from './lib/route';
 
   let route = $state(parseRoute(location.hash));
 </script>

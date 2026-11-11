@@ -2,14 +2,19 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
+import { svelteTesting } from '@testing-library/svelte/vite';
 
 export default defineConfig({
   base: '/gym-tracker/',
   plugins: [
     svelte(),
+    svelteTesting(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
+        id: '/gym-tracker/',
+        description: 'Offline-first gym logging.',
+        orientation: 'portrait',
         name: 'Gym',
         short_name: 'Gym',
         start_url: '/gym-tracker/',
@@ -26,9 +31,9 @@ export default defineConfig({
       workbox: { globPatterns: ['**/*.{js,css,html,woff2,png,svg}'] },
     }),
   ],
-  resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
   test: {
     environment: 'jsdom',
+    globals: true,
     include: ['tests/**/*.test.ts'],
   },
 });
