@@ -29,11 +29,19 @@ export function lastSessionSets(history: SetLog[], exerciseId: string, beforeDat
   return sessionsBefore(history, exerciseId, beforeDate)[0] ?? [];
 }
 
+export type RepRange = { repMin: number; repMax: number };
+
+/** Two consecutive earlier sessions with a "felt it" set. */
+const feltItHold = (sessions: SetLog[][]) =>
+  sessions.length >= 2 && sessions[0].some((s) => s.feltIt) && sessions[1].some((s) => s.feltIt);
+
+/** `range` overrides ex.repMin/repMax (per-session rep ranges, see rangeFor in seed.ts). */
 export function targetFor(
   ex: Exercise,
   history: SetLog[],
   setNo: number,
   beforeDate: string,
+  range: RepRange = ex,
 ): { kg: number; reps: number } | null {
   const sessions = sessionsBefore(history, ex.id, beforeDate);
   const last = sessions[0];
@@ -42,21 +50,22 @@ export function targetFor(
   const prev = last.find((s) => s.setNo === setNo) ?? last[last.length - 1];
 
   // Two consecutive sessions with a "felt it" set: hold.
-  if (sessions.length >= 2 && sessions[0].some((s) => s.feltIt) && sessions[1].some((s) => s.feltIt)) {
+  if (feltItHold(sessions)) {
     return { kg: prev.kg, reps: prev.reps };
   }
 
-  if (prev.reps >= ex.repMax) {
+  if (prev.reps >= range.repMax) {
     if (ex.assisted) {
       // Progress = less assistance. Nothing left to remove at 0 kg: hold.
       if (prev.kg <= 0) return { kg: 0, reps: prev.reps };
-      return { kg: Math.max(0, round2(prev.kg - ex.step)), reps: ex.repMin };
+      return { kg: Math.max(0, round2(prev.kg - ex.step)), reps: range.repMin };
     }
-    return { kg: round2(prev.kg + ex.step), reps: ex.repMin };
+    return { kg: round2(prev.kg + ex.step), reps: range.repMin };
   }
-  return { kg: prev.kg, reps: Math.min(prev.reps + 1, ex.repMax) };
+  return { kg: prev.kg, reps: Math.min(prev.reps + 1, range.repMax) };
 }
 
+/** Caller must pass only prior sets of the same exercise from earlier workouts. */
 export function isPR(
   ex: Exercise,
   set: Pick<SetLog, 'kg' | 'reps' | 'warmup'>,
@@ -75,14 +84,22 @@ export function isPR(
     return set.kg === minKg ? set.reps > bestReps : set.reps >= bestReps;
   }
 
+  if (set.kg === 0) {
+    // Bodyweight: e1RM is 0, so compare reps against the best prior reps at 0 kg.
+    const zero = prior.filter((s) => s.kg === 0);
+    return zero.length > 0 && set.reps > Math.max(...zero.map((s) => s.reps));
+  }
+
   const best = Math.max(...prior.map((s) => e1rm(s.kg, s.reps)));
   return e1rm(set.kg, set.reps) > best;
 }
 
-export function addWeightDue(ex: Exercise, history: SetLog[], today: string): boolean {
-  const last = lastSessionSets(history, ex.id, today);
+export function addWeightDue(ex: Exercise, history: SetLog[], today: string, range: RepRange = ex): boolean {
+  const sessions = sessionsBefore(history, ex.id, today);
+  const last = sessions[0] ?? [];
   if (last.length === 0) return false;
-  if (!last.every((s) => s.reps >= ex.repMax)) return false;
+  if (feltItHold(sessions)) return false;
+  if (!last.every((s) => s.reps >= range.repMax)) return false;
   // Assisted: only due if there is assistance left to remove.
   return ex.assisted ? Math.min(...last.map((s) => s.kg)) > 0 : true;
 }

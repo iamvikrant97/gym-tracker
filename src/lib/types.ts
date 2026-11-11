@@ -17,7 +17,13 @@ export interface Exercise {
   note?: string;
 }
 
-export interface TemplateItem { exerciseId: string; sets: number }
+export interface TemplateItem {
+  exerciseId: string;
+  sets: number;
+  /** Per-session rep range overriding the library range. */
+  repMin?: number;
+  repMax?: number;
+}
 
 export interface SessionTemplate {
   id: SessionId;

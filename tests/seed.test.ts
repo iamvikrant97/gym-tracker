@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EXERCISES, TEMPLATES, exerciseById, swapOptions } from '../src/lib/seed';
+import { EXERCISES, TEMPLATES, exerciseById, swapOptions, rangeFor } from '../src/lib/seed';
 
 const names = (id: string) =>
   TEMPLATES.find((t) => t.id === id)!.items.map((i) => exerciseById(i.exerciseId)!.name);
@@ -43,5 +43,37 @@ describe('seed', () => {
     expect(exerciseById('converging-chest-press')!.step).toBe(5);
     expect(exerciseById('smith-incline-press')!.step).toBe(2.5);
     expect(exerciseById('db-incline-press')!.step).toBe(2.5);
+  });
+
+  it('swapOptions is symmetric across the linked back exercises', () => {
+    const linked = ['straight-arm-cable-pulldown', 'wide-grip-cable-row', 'single-arm-cable-row'];
+    for (const a of linked) for (const b of linked) {
+      if (a !== b) expect(swapOptions(a).map((x) => x.id), `${a} -> ${b}`).toContain(b);
+    }
+  });
+
+  // [session, [name, sets, repMin, repMax][]] from build.py PLAN
+  const PLAN: Record<string, [string, number, number, number][]> = {
+    'CB-A': [['Smith flat press', 3, 6, 10], ['Lat pulldown wide', 3, 8, 12], ['Smith incline press', 3, 8, 12], ['Cable row V-handle', 3, 8, 12], ['Pec fly machine', 2, 12, 15], ['Seated machine row', 2, 10, 12]],
+    'L-A': [['Leg press', 4, 8, 12], ['Leg extension', 3, 10, 15], ['Romanian deadlift', 3, 8, 10], ['Seated leg curl', 3, 10, 12], ['Calf raise machine', 3, 12, 15]],
+    'SA-A': [['DB shoulder press', 3, 8, 10], ['DB lateral raise', 3, 12, 15], ['Pec fly reverse (rear delt)', 3, 12, 15], ['Barbell curl', 5, 8, 12], ['Bar pushdown', 5, 10, 12]],
+    'CB-B': [['Converging chest press', 3, 8, 12], ['Seated machine row', 3, 8, 12], ['Smith incline press', 3, 10, 15], ['Neutral-grip pulldown', 3, 10, 12], ['Pec fly machine', 2, 12, 15], ['Straight-arm cable pulldown', 2, 12, 15]],
+    'L-B': [['Romanian deadlift', 3, 8, 10], ['Lying leg curl', 3, 10, 12], ['Leg press feet high', 3, 10, 12], ['Calf raise machine', 3, 12, 15], ['Cable crunch', 3, 10, 15]],
+    'SA-B': [['Machine shoulder press', 3, 10, 12], ['Cable lateral raise', 4, 12, 20], ['Rope face pull', 3, 12, 15], ['Hammer curl', 3, 10, 12], ['Rope pushdown', 3, 10, 12]],
+  };
+  for (const [sid, rows] of Object.entries(PLAN)) {
+    it(`${sid}: exercises, sets and effective rep ranges match build.py`, () => {
+      const t = TEMPLATES.find((x) => x.id === sid)!;
+      expect(t.items.map((i) => exerciseById(i.exerciseId)!.name)).toEqual(rows.map((r) => r[0]));
+      expect(t.items.map((i) => i.sets)).toEqual(rows.map((r) => r[1]));
+      expect(t.items.map((i) => rangeFor(sid as never, i.exerciseId))).toEqual(rows.map((r) => ({ repMin: r[2], repMax: r[3] })));
+    });
+  }
+
+  it('rangeFor: override, swap override, library fallback', () => {
+    expect(rangeFor('CB-B', 'wide-grip-cable-row')).toEqual({ repMin: 12, repMax: 15 });
+    expect(rangeFor('CB-A', 'wide-grip-cable-row')).toEqual({ repMin: 10, repMax: 12 });
+    expect(rangeFor('CB-A', 'seated-machine-row')).toEqual({ repMin: 10, repMax: 12 });
+    expect(rangeFor('CB-B', 'no-such')).toEqual({ repMin: 0, repMax: 0 });
   });
 });

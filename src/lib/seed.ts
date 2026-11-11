@@ -77,21 +77,37 @@ export function exerciseById(id: string): Exercise | undefined {
   return byId.get(id);
 }
 
-/** Extra exercises (from other slots) offered when swapping a given slot. */
-const EXTRA_SWAPS: Record<string, string[]> = {
-  'Lat isolation': ['single-arm-cable-row', 'wide-grip-cable-row'],
-};
+/** Back exercises that can stand in for each other across slots (symmetric). */
+const LINKED_SWAPS = ['straight-arm-cable-pulldown', 'single-arm-cable-row', 'wide-grip-cable-row'];
 
-/** Swap list for an exercise: everything in its slot plus slot-specific extras. */
+/** Swap list for an exercise: everything in its slot plus any linked exercises. */
 export function swapOptions(exerciseId: string): Exercise[] {
   const ex = byId.get(exerciseId);
   if (!ex) return [];
-  const extras = (EXTRA_SWAPS[ex.slot] ?? []).map((i) => byId.get(i)!);
-  return [...EXERCISES.filter((e) => e.slot === ex.slot), ...extras];
+  const ids = new Set(EXERCISES.filter((e) => e.slot === ex.slot).map((e) => e.id));
+  if (LINKED_SWAPS.includes(exerciseId)) for (const id of LINKED_SWAPS) ids.add(id);
+  return EXERCISES.filter((e) => ids.has(e.id));
 }
 
-const T = (id: SessionId, name: string, group: SessionTemplate['group'], variant: 'A' | 'B', items: [string, number][]): SessionTemplate => ({
-  id, name, group, variant, items: items.map(([n, sets]) => ({ exerciseId: slug(n), sets })),
+/** Rep ranges for exercises used as a swap in a session where build.py gives a different range. */
+const SWAP_RANGES: Partial<Record<SessionId, Record<string, { repMin: number; repMax: number }>>> = {
+  'CB-B': { 'wide-grip-cable-row': { repMin: 12, repMax: 15 } },
+};
+
+/** Effective rep range: template item override, then swap override, then library. */
+export function rangeFor(sessionId: SessionId, exerciseId: string): { repMin: number; repMax: number } {
+  const item = TEMPLATES.find((t) => t.id === sessionId)?.items.find((i) => i.exerciseId === exerciseId);
+  if (item?.repMin !== undefined && item.repMax !== undefined) return { repMin: item.repMin, repMax: item.repMax };
+  const swap = SWAP_RANGES[sessionId]?.[exerciseId];
+  if (swap) return swap;
+  const ex = byId.get(exerciseId);
+  return { repMin: ex?.repMin ?? 0, repMax: ex?.repMax ?? 0 };
+}
+
+type Item = [string, number] | [string, number, number, number];
+const T = (id: SessionId, name: string, group: SessionTemplate['group'], variant: 'A' | 'B', items: Item[]): SessionTemplate => ({
+  id, name, group, variant,
+  items: items.map(([n, sets, repMin, repMax]) => ({ exerciseId: slug(n), sets, ...(repMin !== undefined ? { repMin, repMax } : {}) })),
 });
 
 export const TEMPLATES: SessionTemplate[] = [
@@ -103,16 +119,16 @@ export const TEMPLATES: SessionTemplate[] = [
     ['Leg press', 4], ['Leg extension', 3], ['Romanian deadlift', 3], ['Seated leg curl', 3], ['Calf raise machine', 3],
   ]),
   T('SA-A', 'Shoulders + Arms A', 'SA', 'A', [
-    ['DB shoulder press', 3], ['DB lateral raise', 3], ['Pec fly reverse (rear delt)', 3], ['Barbell curl', 5], ['Bar pushdown', 5],
+    ['DB shoulder press', 3, 8, 10], ['DB lateral raise', 3], ['Pec fly reverse (rear delt)', 3], ['Barbell curl', 5], ['Bar pushdown', 5],
   ]),
   T('CB-B', 'Chest + Back B', 'CB', 'B', [
-    ['Converging chest press', 3], ['Seated machine row', 3], ['Smith incline press', 3],
+    ['Converging chest press', 3], ['Seated machine row', 3, 8, 12], ['Smith incline press', 3, 10, 15],
     ['Neutral-grip pulldown', 3], ['Pec fly machine', 2], ['Straight-arm cable pulldown', 2],
   ]),
   T('L-B', 'Legs B', 'L', 'B', [
     ['Romanian deadlift', 3], ['Lying leg curl', 3], ['Leg press feet high', 3], ['Calf raise machine', 3], ['Cable crunch', 3],
   ]),
   T('SA-B', 'Shoulders + Arms B', 'SA', 'B', [
-    ['Machine shoulder press', 3], ['Cable lateral raise', 4], ['Rope face pull', 3], ['Hammer curl', 3], ['Rope pushdown', 3],
+    ['Machine shoulder press', 3, 10, 12], ['Cable lateral raise', 4], ['Rope face pull', 3], ['Hammer curl', 3], ['Rope pushdown', 3],
   ]),
 ];

@@ -235,3 +235,30 @@ describe('addWeightDue', () => {
     expect(addWeightDue(a, [set({ kg: 0, reps: 10 })], TODAY)).toBe(false);
   });
 });
+
+describe('effective range, felt-it hold and bodyweight PRs', () => {
+  it('targetFor uses an optional range override', () => {
+    const h = [set({ kg: 10, reps: 12 })];
+    expect(targetFor(ex({ repMax: 15 }), h, 1, TODAY)).toEqual({ kg: 10, reps: 13 });
+    expect(targetFor(ex({ repMax: 15 }), h, 1, TODAY, { repMin: 8, repMax: 12 })).toEqual({ kg: 12.5, reps: 8 });
+  });
+  it('addWeightDue uses an optional range override', () => {
+    const h = [set({ kg: 10, reps: 12 })];
+    expect(addWeightDue(ex({ repMax: 15 }), h, TODAY)).toBe(false);
+    expect(addWeightDue(ex({ repMax: 15 }), h, TODAY, { repMin: 8, repMax: 12 })).toBe(true);
+  });
+  it('addWeightDue is false while the felt-it hold applies', () => {
+    const h = [
+      set({ date: '2026-11-02', kg: 10, reps: 15, feltIt: true }),
+      set({ date: '2026-11-09', kg: 10, reps: 15, feltIt: true }),
+    ];
+    expect(addWeightDue(ex(), h, TODAY)).toBe(false);
+  });
+  it('0 kg exercise: PR when reps exceed best prior reps at 0 kg', () => {
+    const e = ex();
+    const prior = [set({ kg: 0, reps: 12 })];
+    expect(isPR(e, { kg: 0, reps: 15, warmup: false }, prior)).toBe(true);
+    expect(isPR(e, { kg: 0, reps: 12, warmup: false }, prior)).toBe(false);
+    expect(isPR(e, { kg: 0, reps: 10, warmup: false }, prior)).toBe(false);
+  });
+});
