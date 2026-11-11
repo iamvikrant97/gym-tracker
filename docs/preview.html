@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gym App Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700;800&family=Albert+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* One dark world: graphite ground, blue = done, amber = PR only. Layout: one screen at a time, bottom dock stack (rest > spotify > nav). */
+:root{
+  --ground:#0B0D11; --surface:#13161C; --raised:#1A1E26; --line:#242934;
+  --text:#E8EAEE; --muted:#8C94A3; --blue:#4C8DFF; --blue-deep:#16305C; --blue-ink:#DCE7FF; --pr:#F2B544; --green:#1ED760;
+  --display:"Red Hat Display",system-ui,sans-serif; --body:"Albert Sans",system-ui,sans-serif;
+  --ease-out:cubic-bezier(0.23,1,0.32,1); --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--ground);color:var(--text);font:400 15px/1.45 var(--body);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.screen{max-width:440px;margin:0 auto;padding:0 16px 190px;min-height:100%}
+.screen[hidden]{display:none}
+.press{transition:transform 160ms var(--ease-out)}
+.press:active{transform:scale(.97)}
+.muted{color:var(--muted)}
+
+/* HOME */
+.home-top{display:flex;align-items:center;padding:22px 0 0}
+.home-top .date{font-size:13px;color:var(--muted)}
+.sync{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--blue)}
+.greet{font:800 38px/1.05 var(--body);letter-spacing:-.015em;margin:28px 0 18px;text-wrap:balance}
+.today{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px}
+.today .lbl{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.today h2{font:800 32px/1.05 var(--body);letter-spacing:-.02em;margin:8px 0 4px}
+.today .meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ex-list{list-style:none;margin:16px 0 18px;padding:0;display:grid;gap:8px}
+.ex-list li{display:flex;gap:10px;font-size:14px}
+.ex-list li b{font:600 13px/1.6 var(--display);color:var(--blue);min-width:22px}
+.ex-list li span:last-child{margin-left:auto;white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
+.start{display:flex;align-items:center;justify-content:center;width:100%;height:56px;border-radius:14px;background:var(--blue);color:#fff;font-weight:600;font-size:16px}
+.swapday{display:block;margin:12px auto 0;font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;min-height:44px}
+.notes{margin-top:18px;display:grid;gap:8px}
+.notes p{margin:0;display:flex;gap:10px;align-items:baseline;font-size:13.5px;color:var(--muted)}
+.notes p::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:#3A404C;transform:translateY(-1px)}
+.notes p.warn::before{background:var(--pr)}
+.notes strong{color:var(--text);font-weight:500}
+
+/* WORKOUT */
+.top{position:sticky;top:0;z-index:5;margin:0 -16px;padding:12px 16px;background:rgba(11,13,17,.8);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%)}
+.row{display:flex;align-items:center;gap:12px}
+.back{width:44px;height:44px;margin-left:-10px;display:grid;place-items:center;border-radius:12px}
+.back svg{width:22px;height:22px}
+.top h1{font:800 22px/1.1 var(--body);letter-spacing:-.01em;margin:0}
+.clock{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums}
+.clock b{display:block;font:600 20px/1 var(--display)}
+.clock span{font-size:11px;color:var(--muted)}
+.meter{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;margin-top:12px;height:6px}
+.seg{border-radius:2px;background:var(--line);position:relative;overflow:hidden}
+.seg::after{content:"";position:absolute;inset:0;background:var(--blue);transform:scaleX(0);transform-origin:left;transition:transform 320ms var(--ease-out)}
+.seg.on::after{transform:scaleX(1)}
+.meter-label{display:flex;justify-content:space-between;margin-top:7px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.meter-label strong{color:var(--text)}
+.group{margin-top:12px}
+.group-head{display:flex;gap:8px;align-items:baseline;margin:0 2px 8px;font-size:12px;color:var(--muted)}
+.group-head .tag{font:600 13px/1 var(--display);letter-spacing:.06em;color:var(--blue)}
+.pair{display:grid;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 14px 8px}
+.card-head{display:flex;align-items:flex-start;gap:10px}
+.code{font:600 13px/1 var(--display);color:var(--muted);padding-top:4px;min-width:20px}
+.ex-name{font:600 17px/1.25 var(--body);transition:filter 180ms var(--ease-out),opacity 180ms var(--ease-out)}
+.ex-name.swapping{filter:blur(2px);opacity:0}
+.ex-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.swap{margin-left:auto;height:36px;padding:0 10px;border-radius:9px;background:var(--raised);font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.swap svg{width:14px;height:14px}
+.sets{margin-top:10px;font-variant-numeric:tabular-nums}
+.shead,.set{display:grid;grid-template-columns:28px 1fr 66px 54px 48px;align-items:center;column-gap:8px}
+.shead{font:500 11px/1 var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding-bottom:6px}
+.shead span:nth-child(3),.shead span:nth-child(4){text-align:center}
+.set{position:relative;padding:4px 0}
+.set>*:not(.fill){position:relative}
+.fill{position:absolute;inset:1px -8px;border-radius:9px;background:var(--blue-deep);clip-path:inset(0 100% 0 0 round 9px);transition:clip-path 300ms var(--ease-out);pointer-events:none}
+.set.done .fill{clip-path:inset(0 0 0 0 round 9px)}
+.set.next:not(.done) .sn{color:var(--blue)}
+.sn{font:600 15px/1 var(--display);color:var(--muted)}
+.prev{font-size:13px;color:var(--muted)}
+.val{height:44px;border-radius:9px;background:var(--raised);font:600 18px/1 var(--display);text-align:center;touch-action:pan-y;user-select:none;position:relative;overflow:hidden;transition:background 200ms var(--ease-out)}
+.val.ghost{color:#9AA2B0}
+.set.done .val{background:transparent;color:var(--blue-ink)}
+.val .hint{position:absolute;inset:auto 0 3px 0;font:500 10px/1 var(--body);color:#C3C9D3;opacity:0;transition:opacity 160ms}
+.val.dragging{background:#232936}
+.val.dragging .hint{opacity:1}
+.chk{width:48px;height:44px;border-radius:11px;background:var(--raised);display:grid;place-items:center;transition:transform 160ms var(--ease-out),background 200ms var(--ease-out)}
+.chk:active{transform:scale(.94)}
+.chk svg{width:20px;height:20px;stroke:#7A8291;transition:stroke 200ms}
+.set.done .chk{background:var(--blue)}
+.set.done .chk svg{stroke:#fff}
+.pr{margin-left:6px;font:600 11px/1 var(--body);color:#1A1406;background:var(--pr);border-radius:4px;padding:3px 5px;opacity:0;display:inline-block;transform:translateY(4px);transition:opacity 220ms var(--ease-out),transform 220ms var(--ease-out)}
+.pr.show{opacity:1;transform:none}
+.finish{display:block;width:100%;height:54px;margin-top:24px;border-radius:14px;background:var(--raised);font-weight:600;color:var(--muted);transition:background 300ms var(--ease-out),color 300ms var(--ease-out)}
+.finish.ready{background:var(--blue);color:#fff}
+
+/* OTHER TABS */
+.page-title{font:800 32px/1.05 var(--body);letter-spacing:-.02em;margin:26px 0 16px}
+.list-row{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+.list-row .nm{font-weight:500}
+.list-row .sub{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.flag{margin-left:auto;font-size:12px;font-weight:600;padding:5px 8px;border-radius:7px;background:var(--blue);color:#fff}
+.flag.keep{background:var(--raised);color:var(--muted);font-weight:500}
+.spark{width:64px;height:24px;margin-left:auto}
+.bars{display:grid;gap:12px}
+.bar-row{display:grid;grid-template-columns:90px 1fr 44px;align-items:center;gap:10px;font-size:13.5px}
+.track{height:8px;border-radius:4px;background:var(--line);position:relative;overflow:hidden}
+.track i{position:absolute;inset:0 auto 0 0;background:var(--blue);border-radius:4px}
+.track::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:#4A5160}
+.bar-row span:last-child{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.example{margin-top:18px;font-size:12px;color:var(--muted)}
+
+.seg-ctl{display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:16px}
+.seg-ctl button{height:40px;border-radius:9px;font-size:14px;color:var(--muted);transition:background 200ms var(--ease-out),color 200ms var(--ease-out)}
+.seg-ctl button[aria-selected="true"]{background:var(--raised);color:var(--text)}
+.small{font-size:12.5px;margin:0 0 6px}
+.mrow{width:100%;display:grid;grid-template-columns:1fr auto 72px;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid var(--line);text-align:left}
+.mrow .nm{font-weight:600}
+.mrow .sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.delta{font:700 22px/1 var(--display);font-variant-numeric:tabular-nums}
+.delta.up{color:var(--blue)} .delta.flat{color:var(--muted)} .delta.down{color:var(--pr)}
+.mbars{display:flex;align-items:flex-end;gap:3px;height:28px;width:52px}
+.mbars i{flex:1;background:#2C3340;border-radius:2px}
+.mbars i:last-child{background:var(--blue)}
+.mbars.low i:last-child{background:var(--pr)}
+.chart{width:100%;height:150px;margin:6px 0 10px}
+.ex-mini{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px}
+.ex-mini span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.pl-sec{font:600 12px/1 var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 6px}
+.pl-scroll{max-height:56vh;overflow:auto;margin:0 -4px;padding:0 4px}
+.pl.on{background:var(--raised)}
+.pl .eq{margin-left:auto;display:none;gap:2px;align-items:flex-end;height:14px}
+.pl.on .eq{display:flex}
+.pl .eq i{width:3px;background:var(--green);border-radius:1px;height:6px}
+.pl .eq i:nth-child(2){height:12px}.pl .eq i:nth-child(3){height:9px}
+/* DOCK STACK */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:10;pointer-events:none}
+.dock>*{pointer-events:auto}
+.rest{width:min(408px,calc(100% - 32px));margin:0 auto 8px;background:rgba(26,30,38,.9);backdrop-filter:blur(20px) saturate(170%);-webkit-backdrop-filter:blur(20px) saturate(170%);
+  border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:10px 10px 10px 14px;display:flex;align-items:center;gap:10px;position:relative;
+  transform:translateY(calc(100% + 140px));transition:transform 420ms var(--ease-drawer)}
+.rest.open{transform:translateY(0)}
+.rest.over .t{color:var(--pr)}
+.rest.over .bar i{background:var(--pr)}
+.rest .t{font:700 30px/1 var(--display);font-variant-numeric:tabular-nums;min-width:62px}
+.rest .lbl{font-size:12px;color:var(--muted);line-height:1.3;flex:1;min-width:0}
+.rest .lbl b{display:block;color:var(--text);font-weight:500;font-size:13px}
+.rest .ctl{display:flex;gap:6px}
+.rest .ctl button{height:40px;min-width:44px;padding:0 8px;border-radius:10px;background:rgba(255,255,255,.06);font-size:13px}
+.rest .ctl .skip{background:var(--blue);color:#fff;font-weight:600}
+.rest .bar{position:absolute;left:14px;right:14px;top:0;height:2px;overflow:hidden;border-radius:2px}
+.rest .bar i{display:block;height:100%;background:var(--blue);transform-origin:left}
+.spot{width:min(408px,calc(100% - 32px));margin:0 auto 8px;height:56px;background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;align-items:center;gap:10px;padding:0 6px 0 8px;touch-action:pan-y;position:relative;overflow:hidden}
+.art{width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,#2A3140,#1A1E26);flex:none;display:grid;place-items:center}
+.art svg{width:18px;height:18px;color:var(--muted)}
+.song{min-width:0;flex:1;transition:transform 260ms var(--ease-out),opacity 200ms}
+.song b{display:block;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song span{font-size:12px;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spot .ib{width:44px;height:44px;display:grid;place-items:center;border-radius:10px}
+.spot .ib svg{width:20px;height:20px}
+.spot .ib.play svg{width:22px;height:22px}
+.prog{position:absolute;left:8px;right:8px;bottom:0;height:2px;background:var(--line)}
+.prog i{display:block;height:100%;width:38%;background:var(--green)}
+nav{display:flex;justify-content:space-around;background:rgba(11,13,17,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line);padding:6px 0 10px}
+nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;color:var(--muted);min-width:72px;min-height:48px;justify-content:center;border-radius:10px}
+nav button svg{width:22px;height:22px}
+nav button[aria-current="page"]{color:var(--text)}
+nav button[aria-current="page"] svg{color:var(--blue)}
+
+/* SHEETS */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity 300ms var(--ease-out);z-index:20}
+.scrim.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:50%;bottom:0;width:min(440px,100%);z-index:21;background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;padding:8px 18px 26px;
+  transform:translate(-50%,100%);transition:transform 420ms var(--ease-drawer)}
+.sheet.open{transform:translate(-50%,0)}
+.grab{width:40px;height:5px;border-radius:3px;background:#3A404C;margin:4px auto 14px}
+.sheet h2{font:800 21px/1.15 var(--body);margin:0 0 4px}
+.sheet .sub{margin:0 0 14px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.stepper{display:grid;grid-template-columns:64px 1fr 64px;align-items:center;gap:10px;margin:8px 0}
+.stepper .sb{height:64px;border-radius:16px;background:var(--raised);font:600 30px/1 var(--display);display:grid;place-items:center;transition:transform 120ms var(--ease-out),background 120ms}
+.stepper .sb:active{transform:scale(.95);background:#252A35}
+.stepper .big{text-align:center;font:700 52px/1 var(--display);font-variant-numeric:tabular-nums}
+.stepper .big small{display:block;font:500 12px/1.4 var(--body);color:var(--muted)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 18px}
+.chip{height:40px;padding:0 14px;border-radius:20px;background:var(--raised);font-size:13px}
+.save{width:100%;height:54px;border-radius:14px;background:var(--blue);color:#fff;font-weight:600;font-size:16px}
+.opt{width:100%;display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:12px;text-align:left}
+.opt .meta{font-size:12px;color:var(--muted)}
+.opt .dot{margin-left:auto;width:20px;height:20px;border-radius:50%;border:2px solid #3A404C;display:grid;place-items:center}
+.opt[aria-checked="true"]{background:var(--raised)}
+.opt[aria-checked="true"] .dot{border-color:var(--blue)}
+.opt[aria-checked="true"] .dot::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--blue)}
+.pl{display:flex;align-items:center;gap:12px;padding:10px 4px;border-radius:12px;width:100%;text-align:left}
+.pl .art{width:48px;height:48px}
+.pl span{font-size:12px;color:var(--muted);display:block}
+.toast{position:fixed;left:50%;top:14px;z-index:30;transform:translate(-50%,-140%);transition:transform 380ms var(--ease-drawer);background:var(--pr);color:#1A1406;font-weight:600;font-size:14px;padding:10px 16px;border-radius:12px;white-space:nowrap}
+.toast.show{transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion: reduce){
+  .rest,.sheet,.toast{transition:opacity 200ms ease}
+  .rest{transform:none;opacity:0;pointer-events:none}.rest.open{opacity:1;pointer-events:auto}
+  .sheet{transform:translate(-50%,0);opacity:0;pointer-events:none}.sheet.open{opacity:1;pointer-events:auto}
+  .toast{transform:translate(-50%,0);opacity:0}.toast.show{opacity:1}
+  .fill{clip-path:none;opacity:0;transition:opacity 200ms ease}.set.done .fill{opacity:1}
+  .seg::after{transform:none;opacity:0;transition:opacity 200ms ease}.seg.on::after{opacity:1}
+}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<section class="screen" id="home">
+  <div class="home-top"><span class="date" id="homeDate">Thursday, 12 Nov</span><span class="sync"><i></i>Synced 8:12 am</span></div>
+  <h1 class="greet">Morning, Vik</h1>
+  <article class="today">
+    <div class="lbl">Today · session 4 of 6</div>
+    <h2>Chest + Back B</h2>
+    <div class="meta">16 sets · about 70 min · lighter, more reps</div>
+    <ol class="ex-list">
+      <li><b>1</b><span>Converging chest press</span><span>3 sets</span></li>
+      <li><b>2</b><span>Seated machine row</span><span>3 sets</span></li>
+      <li><b>3</b><span>Smith incline press</span><span>3 sets</span></li>
+      <li><b>4</b><span>Neutral-grip pulldown</span><span>3 sets</span></li>
+      <li><b>5</b><span>Pec fly machine</span><span>2 sets</span></li>
+      <li><b>6</b><span>Straight-arm cable pulldown</span><span>2 sets</span></li>
+    </ol>
+    <button class="start press" type="button" id="startBtn">Start workout</button>
+    <button class="swapday" type="button" id="swapDay">Swap day</button>
+  </article>
+  <div class="notes">
+    <p><span><strong>3 of 6</strong> sessions done this week</span></p>
+    <p class="warn"><span>Legs trained <strong>yesterday</strong> · next legs day Saturday</span></p>
+  </div>
+</section>
+
+<!-- WORKOUT -->
+<section class="screen" id="workout" hidden>
+  <header class="top">
+    <div class="row">
+      <button class="back" type="button" id="backBtn" aria-label="Back to home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <h1>Chest + Back B</h1>
+      <div class="clock"><b id="elapsed">00:00</b><span>elapsed</span></div>
+    </div>
+    <div class="meter" id="meter" aria-hidden="true"></div>
+    <div class="meter-label"><span><strong id="doneN">0</strong> of <span id="totalN">16</span> sets</span><span id="pct">0%</span></div>
+  </header>
+  <main id="list"></main>
+  <button class="finish press" id="finish" type="button">Finish workout</button>
+  <p class="example">Preview with example numbers from your 9 Nov session.</p>
+</section>
+
+<!-- PROGRESS -->
+<section class="screen" id="progress" hidden>
+  <h1 class="page-title">Progress</h1>
+  <div class="seg-ctl" role="tablist" aria-label="Progress view">
+    <button type="button" role="tab" aria-selected="true" data-v="muscles">Muscles</button>
+    <button type="button" role="tab" aria-selected="false" data-v="exercises">Exercises</button>
+  </div>
+  <div id="pv-muscles">
+    <p class="muted small">Strength change over the last 4 weeks · sets per week</p>
+    <div id="muscleList"></div>
+  </div>
+  <div id="pv-exercises" hidden>
+    <div class="list-row"><div><div class="nm">Cable row V-handle</div><div class="sub">30 × 8 · 9 Nov</div></div><span class="flag">Add weight</span></div>
+    <div class="list-row"><div><div class="nm">Smith flat press</div><div class="sub">12.5 × 6 · 9 Nov</div></div><span class="flag keep">Keep building</span></div>
+    <div class="list-row"><div><div class="nm">Leg press</div><div class="sub">10 × 10 · 11 Nov</div></div><span class="flag">Add weight</span></div>
+    <div class="list-row"><div><div class="nm">Lat pulldown wide</div><div class="sub">40 × 8 · 9 Nov</div></div><span class="flag keep">Keep building</span></div>
+  </div>
+  <p class="example">Example data. Tap a muscle to see its exercises and chart.</p>
+</section>
+
+<!-- MUSCLE DETAIL SHEET is rendered into #mSheet -->
+<!-- WEEK -->
+<section class="screen" id="week" hidden>
+  <h1 class="page-title">This week</h1>
+  <p class="muted" style="margin:0 0 18px;font-size:13px">Hard sets per muscle · line marks 10, bar end is 20</p>
+  <div class="bars">
+    <div class="bar-row"><span>Chest</span><div class="track"><i style="width:30%"></i></div><span>6</span></div>
+    <div class="bar-row"><span>Back</span><div class="track"><i style="width:30%"></i></div><span>6</span></div>
+    <div class="bar-row"><span>Shoulders</span><div class="track"><i style="width:45%"></i></div><span>9</span></div>
+    <div class="bar-row"><span>Biceps</span><div class="track"><i style="width:20%"></i></div><span>4</span></div>
+    <div class="bar-row"><span>Triceps</span><div class="track"><i style="width:15%"></i></div><span>3</span></div>
+    <div class="bar-row"><span>Quads</span><div class="track"><i style="width:15%"></i></div><span>3</span></div>
+    <div class="bar-row"><span>Hamstrings</span><div class="track"><i style="width:15%"></i></div><span>3</span></div>
+  </div>
+  <p class="example">Example data from 9–11 Nov.</p>
+</section>
+
+<!-- DOCK STACK: rest timer above spotify above nav -->
+<div class="dock">
+  <div class="rest" id="rest" role="status" aria-live="polite">
+    <div class="bar"><i id="restBar"></i></div>
+    <div class="t" id="restT">1:30</div>
+    <div class="lbl"><b id="restTitle">Rest</b><span id="restNext">Next: set 2</span></div>
+    <div class="ctl"><button type="button" id="plus" aria-label="Add 15 seconds">+15</button><button type="button" class="skip" id="skip">Skip</button></div>
+  </div>
+  <div class="spot" id="spot">
+    <button class="art" type="button" id="openPl" aria-label="Open playlists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
+    <div class="song" id="song"><b id="songT">Track one</b><span id="songA">Example artist · Gym mix</span></div>
+    <button class="ib" type="button" id="prevT" aria-label="Previous track"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+    <button class="ib play" type="button" id="playT" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" id="playIcon"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></button>
+    <button class="ib" type="button" id="nextT" aria-label="Next track"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+    <div class="prog"><i></i></div>
+  </div>
+  <nav aria-label="Main">
+    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11"/></svg>Today</button>
+    <button type="button" data-tab="progress"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>Progress</button>
+    <button type="button" data-tab="week"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Week</button>
+  </nav>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<!-- ADJUST SHEET -->
+<div class="sheet" id="adjust" role="dialog" aria-modal="true" aria-labelledby="adjTitle">
+  <div class="grab" aria-hidden="true"></div>
+  <h2 id="adjTitle">Set 1</h2>
+  <p class="sub" id="adjSub">Last 10 × 8 · target 10 × 9</p>
+  <div class="stepper"><button class="sb" type="button" data-f="kg" data-d="-1" aria-label="Less weight">−</button><div class="big" role="spinbutton" aria-label="Weight in kg" id="bigKg">10<small>kg · steps of 2.5</small></div><button class="sb" type="button" data-f="kg" data-d="1" aria-label="More weight">+</button></div>
+  <div class="stepper"><button class="sb" type="button" data-f="reps" data-d="-1" aria-label="Fewer reps">−</button><div class="big" role="spinbutton" aria-label="Reps" id="bigReps">9<small>reps</small></div><button class="sb" type="button" data-f="reps" data-d="1" aria-label="More reps">+</button></div>
+  <div class="chips"><button class="chip press" type="button" id="cSame">Same as last</button><button class="chip press" type="button" id="cStep">+1 step</button><button class="chip press" type="button" id="cDrop">Drop set</button></div>
+  <button class="save press" type="button" id="adjSave">Save set</button>
+</div>
+
+<!-- SWAP SHEET -->
+<div class="sheet" id="swapSheet" role="dialog" aria-modal="true" aria-labelledby="swapTitle">
+  <div class="grab" aria-hidden="true"></div>
+  <h2 id="swapTitle">Swap exercise</h2>
+  <p class="sub" id="swapSub"></p>
+  <div id="opts" role="radiogroup" aria-labelledby="swapTitle"></div>
+</div>
+
+<!-- PLAYLIST SHEET -->
+<div class="sheet" id="plSheet" role="dialog" aria-modal="true" aria-labelledby="plTitle">
+  <div class="grab" aria-hidden="true"></div>
+  <h2 id="plTitle">Music</h2>
+  <p class="sub">Plays through Spotify on your phone</p>
+  <div class="pl-scroll" id="pls"></div>
+</div>
+
+<div class="sheet" id="mSheet" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="grab" aria-hidden="true"></div>
+  <h2 id="mTitle">Back</h2>
+  <p class="sub" id="mSub"></p>
+  <svg class="chart" id="mChart" viewBox="0 0 320 150" role="img" aria-label="Strength trend"></svg>
+  <div id="mEx"></div>
+</div>
+<div class="toast" id="toast" role="status">New PR · Smith incline press</div>
+
+<script>
+const SESSION=[
+ {tag:"A",note:"Superset · rest 90 s after A2",items:[
+  {code:"1",slot:"Flat press",name:"Converging chest press",step:5,range:[8,12],sets:[[30,10],[30,10],[30,9]],alts:[["Converging chest press","Machine"],["Smith flat press","Smith"],["DB flat press","Dumbbells"],["Machine chest press","Machine"]]},
+  {code:"2",slot:"Machine row",name:"Seated machine row",step:5,range:[8,12],sets:[[30,8],[30,8],[30,8]],alts:[["Seated machine row","Machine"]]}]},
+ {tag:"B",note:"Superset · rest 90 s after B2",items:[
+  {code:"3",slot:"Incline press",name:"Smith incline press",step:2.5,range:[10,15],sets:[[10,8],[10,8],[10,8]],alts:[["Smith incline press","Smith"],["DB incline press","Dumbbells"],["Incline machine press","Machine"]]},
+  {code:"4",slot:"Vertical pull",name:"Neutral-grip pulldown",step:5,range:[10,12],sets:[[35,8],[35,8],[35,8]],alts:[["Neutral-grip pulldown","Machine"],["Lat pulldown wide","Machine"],["Single-arm cable pulldown","Cable"]]}]},
+ {tag:"C",note:"Superset · rest 60 s after C2",items:[
+  {code:"5",slot:"Chest fly",name:"Pec fly machine",step:5,range:[12,15],sets:[[25,10],[30,8]],alts:[["Pec fly machine","Machine"],["Cable fly","Cable"]]},
+  {code:"6",slot:"Lat isolation",name:"Straight-arm cable pulldown",step:2.5,range:[12,15],sets:[[15,12],[15,12]],alts:[["Straight-arm cable pulldown","Cable"],["Single-arm cable row","Cable"],["Wide-grip cable row","Cable"]]}]}];
+const COMPOUND=["Converging chest press","Seated machine row","Smith incline press","Neutral-grip pulldown"];
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $=s=>document.querySelector(s);
+const fmt=n=>Number.isInteger(n)?n:n.toFixed(1);
+const buzz=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}};
+const total=SESSION.reduce((n,g)=>n+g.items.reduce((m,e)=>m+e.sets.length,0),0);
+function target(ex,i){const[k,r]=ex.sets[i];return r>=ex.range[1]?[k+ex.step,ex.range[0]]:[k,Math.max(r+1,Math.min(r+1,ex.range[1]))];}
+
+/* tabs */
+function show(id){["home","workout","progress","week"].forEach(s=>$("#"+s).hidden=s!==id);
+  document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===(id==="workout"?"home":id)?"page":"false"));scrollTo(0,0);}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>show(b.dataset.tab==="home"&&started?"workout":b.dataset.tab)));
+$("#startBtn").addEventListener("click",()=>{started=started||Date.now();show("workout");$("#startBtn").textContent="Resume workout";});
+$("#backBtn").addEventListener("click",()=>{document.querySelectorAll("nav button")[0].setAttribute("aria-current","page");["workout","progress","week"].forEach(s=>$("#"+s).hidden=true);$("#home").hidden=false;});
+$("#swapDay").addEventListener("click",()=>{const t=$("#swapDay");t.textContent="In the app: pick any of your 6 sessions";});
+
+/* build workout */
+const check='<svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const swapIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>';
+const state={};
+function render(){
+  const list=$("#list");list.innerHTML="";
+  SESSION.forEach(g=>{
+    const sec=document.createElement("section");sec.className="group";
+    sec.innerHTML=`<div class="pair"></div>`;
+    g.items.forEach(ex=>{ex.group=g.tag;ex.rest=COMPOUND.includes(ex.name)?180:120;
+      const card=document.createElement("article");card.className="card";
+      card.innerHTML=`<div class="card-head"><span class="code">${ex.code}</span><div><div class="ex-name">${ex.name}</div><div class="ex-sub">${ex.range[0]}–${ex.range[1]} reps · rest ${ex.rest/60}:00 · steps of ${ex.step} kg</div></div><button class="swap press" type="button">${swapIcon}Swap</button></div>
+      <div class="sets"><div class="shead" aria-hidden="true"><span>Set</span><span>Last</span><span>kg</span><span>Reps</span><span></span></div></div>`;
+      const box=card.querySelector(".sets");
+      ex.sets.forEach((s,i)=>{const id=ex.code+i;const[k,r]=target(ex,i);state[id]={ex,i,kg:k,reps:r,done:false,el:null};
+        const row=document.createElement("div");row.className="set";row.dataset.id=id;
+        row.innerHTML=`<span class="fill" aria-hidden="true"></span><span class="sn">${i+1}</span><span class="prev">${fmt(s[0])} × ${s[1]}<span class="pr" aria-hidden="true">PR</span></span>
+          <button class="val ghost" type="button" data-f="kg" aria-label="kg, set ${i+1}, tap to change, swipe sideways to step">${fmt(k)}<span class="hint">swipe</span></button>
+          <button class="val ghost" type="button" data-f="reps" aria-label="reps, set ${i+1}">${r}<span class="hint">swipe</span></button>
+          <button class="chk" type="button" aria-pressed="false" aria-label="Complete set ${i+1}">${check}</button>`;
+        state[id].el=row;
+        row.querySelector(".chk").addEventListener("click",()=>toggle(id));
+        row.querySelectorAll(".val").forEach(v=>wire(v,id));
+        box.appendChild(row);});
+      card.querySelector(".swap").addEventListener("click",e=>openSwap(ex,card));
+      sec.querySelector(".pair").appendChild(card);});
+    list.appendChild(sec);});
+  const m=$("#meter");for(let i=0;i<total;i++){const s=document.createElement("span");s.className="seg";m.appendChild(s);}
+  markNext();
+}
+function paint(id){const s=state[id];const[a,b]=s.el.querySelectorAll(".val");a.firstChild.nodeValue=fmt(s.kg);b.firstChild.nodeValue=s.reps;}
+/* tap = open adjust sheet; horizontal swipe = step value directly */
+function wire(v,id){let x0=0,acc=0,moved=false,pid=null;const f=v.dataset.f;
+  v.addEventListener("pointerdown",e=>{x0=e.clientX;acc=0;moved=false;pid=e.pointerId;});
+  v.addEventListener("pointermove",e=>{if(pid!==e.pointerId)return;const dx=e.clientX-x0;
+    if(!moved&&Math.abs(dx)>10){moved=true;v.setPointerCapture(e.pointerId);v.classList.add("dragging");}
+    if(moved){const steps=Math.trunc(dx/22);if(steps!==acc){bump(id,f,steps-acc);acc=steps;buzz(4);}}});
+  const end=()=>{pid=null;v.classList.remove("dragging");};
+  v.addEventListener("pointerup",end);v.addEventListener("pointercancel",end);
+  v.addEventListener("click",e=>{if(moved){e.preventDefault();return;}openAdjust(id);});}
+function bump(id,f,d){const s=state[id];if(f==="kg")s.kg=Math.max(0,+(s.kg+d*s.ex.step).toFixed(2));else s.reps=Math.max(0,s.reps+d);
+  s.el.querySelectorAll(".val").forEach(v=>v.classList.remove("ghost"));paint(id);if(adjId===id)paintAdj();}
+
+let done=0,started=null;
+function toggle(id){const s=state[id];s.done=!s.done;s.el.classList.toggle("done",s.done);
+  s.el.querySelector(".chk").setAttribute("aria-pressed",s.done);
+  const best=Math.max(...s.ex.sets.map(([k,r])=>k*(1+r/30)));const isPR=s.done&&s.kg*(1+s.reps/30)>best+0.01;
+  s.el.querySelector(".pr").classList.toggle("show",isPR);
+  if(isPR){$("#toast").textContent="New PR · "+s.ex.name;$("#toast").classList.add("show");setTimeout(()=>$("#toast").classList.remove("show"),2200);}
+  done+=s.done?1:-1;started=started||Date.now();buzz(s.done?12:0);meter();markNext();
+  if(s.done)afterSet(s.ex,s.i);else closeRest();}
+function markNext(){let found=false;Object.values(state).forEach(s=>{const n=!found&&!s.done;s.el.classList.toggle("next",n);if(n)found=true;});}
+function meter(){[...$("#meter").children].forEach((s,i)=>s.classList.toggle("on",i<done));$("#doneN").textContent=done;$("#pct").textContent=Math.round(done/total*100)+"%";
+  $("#finish").classList.toggle("ready",done===total);}
+function afterSet(ex,i){const all=SESSION.flatMap(g=>g.items);const k=all.indexOf(ex);
+  const nxt=i+1<ex.sets.length?`${ex.name}, set ${i+2}`:(all[k+1]?all[k+1].name+", set 1":"Last set · tap Finish");
+  startRest(ex.rest,nxt);}
+
+/* rest timer */
+let restEnd=0,restDur=0,raf=0,goT=0;
+function restMsg(sec,title,sub){clearTimeout(goT);$("#restTitle").textContent=title;$("#restNext").textContent=sub;$("#restT").textContent=sec?clk(sec):"Go";
+  $("#restBar").style.transform="scaleX(0)";$("#rest").classList.add("open");cancelAnimationFrame(raf);if(!sec)goT=setTimeout(closeRest,2600);}
+function startRest(sec,next){tick.buzzed=false;$("#rest").classList.remove("over");restDur=sec;restEnd=performance.now()+sec*1000;restMsg(sec,"Rest","Next: "+next);tick();}
+function tick(){const left=Math.max(0,restEnd-performance.now());$("#restT").textContent=clk(Math.ceil(left/1000));$("#restBar").style.transform=`scaleX(${left/(restDur*1000)})`;
+  if(left<=0){const over=Math.floor((performance.now()-restEnd)/1000);
+    if(!tick.buzzed){buzz([20,60,20]);tick.buzzed=true;}
+    $("#rest").classList.add("over");$("#restTitle").textContent="Rest over · go when ready";$("#restT").textContent="+"+clk(over);$("#restBar").style.transform="scaleX(1)";}
+  raf=requestAnimationFrame(tick);}
+const clk=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+function closeRest(){cancelAnimationFrame(raf);$("#rest").classList.remove("over");$("#rest").classList.remove("open");}
+$("#skip").addEventListener("click",closeRest);$("#plus").addEventListener("click",()=>{restEnd+=15000;restDur+=15;});
+setInterval(()=>{if(!started)return;const s=Math.floor((Date.now()-started)/1000);$("#elapsed").textContent=`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;},1000);
+
+/* sheets */
+let openSheetEl=null,lastFocus=null;
+function openSheet(el){lastFocus=document.activeElement;openSheetEl=el;$("#scrim").classList.add("open");el.style.transform="";el.classList.add("open");}
+function closeSheet(){if(!openSheetEl)return;openSheetEl.style.transition="";openSheetEl.style.transform="";openSheetEl.classList.remove("open");$("#scrim").classList.remove("open");openSheetEl=null;adjId=null;lastFocus?.focus();}
+$("#scrim").addEventListener("click",closeSheet);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSheet();});
+document.querySelectorAll(".sheet").forEach(s=>{let y0=0,dy=0,h=[],drag=false;
+  s.addEventListener("pointerdown",e=>{if(e.target.closest("button"))return;drag=true;y0=e.clientY;dy=0;h=[[e.clientY,e.timeStamp]];s.setPointerCapture(e.pointerId);s.style.transition="none";});
+  s.addEventListener("pointermove",e=>{if(!drag)return;dy=e.clientY-y0;const y=dy<0?-Math.sqrt(-dy)*2:dy;s.style.transform=`translate(-50%,${y}px)`;h.push([e.clientY,e.timeStamp]);if(h.length>5)h.shift();});
+  s.addEventListener("pointerup",()=>{if(!drag)return;drag=false;const a=h[0],b=h[h.length-1];const v=(b[0]-a[0])/Math.max(1,b[1]-a[1]);s.style.transition="";
+    if(v>0.11||dy>s.offsetHeight*.4)closeSheet();else s.style.transform="";});});
+
+/* adjust sheet with hold-to-repeat */
+let adjId=null;
+function openAdjust(id){adjId=id;const s=state[id];const[lk,lr]=s.ex.sets[s.i];const[tk,tr]=target(s.ex,s.i);
+  $("#adjTitle").textContent=`${s.ex.name} · set ${s.i+1}`;$("#adjSub").textContent=`Last ${fmt(lk)} × ${lr} · target ${fmt(tk)} × ${tr}`;paintAdj();openSheet($("#adjust"));}
+function paintAdj(){const s=state[adjId];$("#bigKg").firstChild.nodeValue=fmt(s.kg);$("#bigKg").querySelector("small").textContent=`kg · steps of ${s.ex.step}`;$("#bigReps").firstChild.nodeValue=s.reps;}
+document.querySelectorAll(".sb").forEach(b=>{let t1=0,t2=0;const go=()=>{bump(adjId,b.dataset.f,+b.dataset.d);buzz(6);};
+  const stop=()=>{clearTimeout(t1);clearInterval(t2);};
+  b.addEventListener("pointerdown",e=>{e.preventDefault();go();t1=setTimeout(()=>{t2=setInterval(go,90);},450);});
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,stop));});
+$("#cSame").addEventListener("click",()=>{const s=state[adjId];[s.kg,s.reps]=s.ex.sets[s.i];bump(adjId,"kg",0);});
+$("#cStep").addEventListener("click",()=>bump(adjId,"kg",1));
+$("#cDrop").addEventListener("click",()=>{const s=state[adjId];s.kg=Math.max(0,+(s.kg*0.75/s.ex.step).toFixed(0)*s.ex.step);bump(adjId,"kg",0);});
+$("#adjSave").addEventListener("click",()=>{const id=adjId;closeSheet();if(!state[id].done)setTimeout(()=>toggle(id),180);});
+
+/* swap */
+let swapEx=null,swapCard=null;
+function openSwap(ex,card){swapEx=ex;swapCard=card;$("#swapSub").textContent=`${ex.slot} · your history stays with each exercise`;const o=$("#opts");o.innerHTML="";
+  ex.alts.forEach(([nm,eq])=>{const b=document.createElement("button");b.type="button";b.className="opt press";b.setAttribute("role","radio");b.setAttribute("aria-checked",nm===ex.name);
+    b.innerHTML=`<div><div>${nm}</div><div class="meta">${eq}</div></div><span class="dot" aria-hidden="true"></span>`;b.addEventListener("click",()=>pick(nm));o.appendChild(b);});
+  openSheet($("#swapSheet"));}
+function pick(nm){[...$("#opts").children].forEach(b=>b.setAttribute("aria-checked",b.firstElementChild.firstElementChild.textContent===nm));
+  if(nm!==swapEx.name){const l=swapCard.querySelector(".ex-name");l.classList.add("swapping");setTimeout(()=>{l.textContent=nm;swapEx.name=nm;l.classList.remove("swapping");},reduce?0:180);}
+  setTimeout(closeSheet,140);}
+
+/* spotify (mock) */
+const TRACKS=[["Track one","Example artist"],["Track two","Example artist"],["Track three","Another artist"]];let ti=0,playing=true;
+function setTrack(d){ti=(ti+d+TRACKS.length)%TRACKS.length;const s=$("#song");s.style.opacity=0;s.style.transform=`translateX(${-d*16}px)`;
+  setTimeout(()=>{$("#songT").textContent=TRACKS[ti][0];$("#songA").textContent=TRACKS[ti][1]+" · Gym mix";s.style.transition="none";s.style.transform=`translateX(${d*16}px)`;
+    requestAnimationFrame(()=>{s.style.transition="";s.style.opacity=1;s.style.transform="";});},160);}
+$("#nextT").addEventListener("click",()=>setTrack(1));$("#prevT").addEventListener("click",()=>setTrack(-1));
+$("#playT").addEventListener("click",()=>{playing=!playing;$("#playT").setAttribute("aria-label",playing?"Pause":"Play");
+  $("#playIcon").innerHTML=playing?'<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>':'<path d="M7 4v16l13-8z"/>';});
+(function(){const sp=$("#spot");let x0=null;sp.addEventListener("pointerdown",e=>{if(e.target.closest("button"))return;x0=e.clientX;});
+  sp.addEventListener("pointerup",e=>{if(x0===null)return;const dx=e.clientX-x0;x0=null;if(Math.abs(dx)>40)setTrack(dx<0?1:-1);});})();
+const PL={
+ "For your workout":[["Workout picks","Matches today: Chest + Back"],["Leg day push","Higher tempo for legs"],["Morning lift","Searches Spotify for 'gym'"]],
+ "Your playlists":[["Gym mix","48 songs"],["Leg day","32 songs"],["Liked songs","Your library"]],
+ "Recently played":[["Gym mix","Yesterday"],["Morning lift","Mon"]]};
+let curPl="Gym mix";
+$("#openPl").addEventListener("click",()=>{const p=$("#pls");p.innerHTML="";
+  Object.entries(PL).forEach(([sec,items])=>{const h=document.createElement("div");h.className="pl-sec";h.textContent=sec;p.appendChild(h);
+    items.forEach(([n,m])=>{const b=document.createElement("button");b.type="button";b.className="pl press"+(n===curPl?" on":"");
+      b.innerHTML=`<span class="art" aria-hidden="true"></span><div>${n}<span>${m}</span></div><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>`;
+      b.addEventListener("click",()=>{curPl=n;$("#songA").textContent=TRACKS[ti][1]+" · "+n;playing=false;$("#playT").click();setTimeout(closeSheet,120);});p.appendChild(b);});});
+  openSheet($("#plSheet"));});
+
+/* progress */
+const MUS=[["Chest",+6,[8,10,12,6],"Smith flat press · Converging · Pec fly"],["Back",+4,[9,10,12,6],"Lat pulldown · Cable row · Machine row"],
+ ["Shoulders",+2,[6,9,9,9],"Machine press · Lateral raise · Rear delt"],["Biceps",0,[4,6,5,4],"Rope hammer · DB curl"],["Triceps",+3,[3,5,6,3],"Rope extension · Pushdown"],
+ ["Quads",+10,[3,6,8,6],"Leg press · Leg extension"],["Hamstrings",-2,[2,3,3,5],"DB deadlift · Leg curl"],["Calves",+5,[0,3,3,3],"Calf raise"]];
+const ml=$("#muscleList");
+MUS.forEach(([m,d,w,ex])=>{const b=document.createElement("button");b.type="button";b.className="mrow press";const max=Math.max(...w,12);
+  b.innerHTML=`<div><div class="nm">${m}</div><div class="sub">${w[w.length-1]} sets this week · ${ex.split(" · ").length} exercise${ex.split(" · ").length>1?"s":""}</div></div>
+  <div class="mbars${w[w.length-1]<10?' low':''}" aria-hidden="true">${w.map(v=>`<i style="height:${Math.max(8,v/max*100)}%"></i>`).join("")}</div>
+  <div class="delta ${d>0?'up':d<0?'down':'flat'}" aria-label="${d} percent">${d>0?'+':''}${d}%</div>`;
+  b.addEventListener("click",()=>openMuscle(m,d,ex));ml.appendChild(b);});
+function openMuscle(m,d,ex){$("#mTitle").textContent=m;$("#mSub").textContent=`Strength ${d>=0?'up':'down'} ${Math.abs(d)}% in 4 weeks · average of its exercises`;
+  const pts=[0,1,2,3,4,5,6,7].map(i=>[20+i*40,120-(i*d*1.2+Math.sin(i*1.7)*6+10)]);
+  const line=pts.map(p=>p.join(",")).join(" ");const area=`20,140 ${line} 300,140`;
+  $("#mChart").innerHTML=`<g stroke="#242934">${[40,80,120].map(y=>`<line x1="20" x2="300" y1="${y}" y2="${y}"/>`).join("")}</g>
+   <polygon points="${area}" fill="rgba(76,141,255,.12)"/><polyline points="${line}" fill="none" stroke="#4C8DFF" stroke-width="2.5" stroke-linejoin="round"/>
+   <circle cx="${pts[7][0]}" cy="${pts[7][1]}" r="4" fill="#4C8DFF"/><text x="20" y="148" fill="#8C94A3" font-size="10">8 weeks ago</text><text x="300" y="148" fill="#8C94A3" font-size="10" text-anchor="end">now</text>`;
+  $("#mEx").innerHTML=ex.split(" · ").map(e=>`<div class="ex-mini"><span>${e}</span><span>trend ↗</span></div>`).join("");
+  openSheet($("#mSheet"));}
+document.querySelectorAll(".seg-ctl button").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".seg-ctl button").forEach(x=>x.setAttribute("aria-selected",x===b));
+  $("#pv-muscles").hidden=b.dataset.v!=="muscles";$("#pv-exercises").hidden=b.dataset.v!=="exercises";}));
+
+render();meter();
+</script>
+</body>
+</html>
