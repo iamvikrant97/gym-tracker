@@ -38,14 +38,18 @@ function padLog(rows) {
 }
 
 function isFreeLogRow(r) {
-  return blank(r[COL.date]) && blank(r[COL.exercise]) && blank(r[COL.kg]) && blank(r[COL.reps]);
+  // Every bridge-owned input cell must be empty, so a hand-typed spacer (Day, RIR or Note only) is kept.
+  return [COL.date, COL.day, COL.exercise, COL.kg, COL.reps, COL.rir, COL.note, COL.id].every((c) => blank(r[c]));
 }
+
+/** App slots that do not exist in the Sheet's Exercises tab, mapped to the closest Sheet slot. */
+const SLOT_ALIASES = { 'Lat isolation': 'Back finisher' };
 
 function writeSet(row, s) {
   row[COL.date] = s.date;
   row[COL.day] = s.day ?? '';
   row[COL.exercise] = s.exercise;
-  row[COL.kg] = Number(s.kg);
+  row[COL.kg] = blank(s.kg) || !Number.isFinite(Number(s.kg)) ? 0 : Number(s.kg);
   row[COL.reps] = Number(s.reps);
   row[COL.rir] = blank(s.rir) ? '' : s.rir;
   row[COL.note] = s.note ?? '';
@@ -56,7 +60,8 @@ function ensureExercise(exRows, s) {
   const name = String(s.exercise).trim();
   const key = norm(name);
   for (let i = EX_FIRST; i < exRows.length; i++) if (norm(exRows[i][1]) === key) return;
-  const slot = s.slot && exRows.some((r, i) => i >= EX_FIRST && r[0] === s.slot) ? s.slot : 'Other';
+  const wanted = SLOT_ALIASES[s.slot] && !exRows.some((r, i) => i >= EX_FIRST && r[0] === s.slot) ? SLOT_ALIASES[s.slot] : s.slot;
+  const slot = wanted && exRows.some((r, i) => i >= EX_FIRST && r[0] === wanted) ? wanted : 'Other';
   let target = -1;
   for (let i = EX_FIRST; i < exRows.length; i++) {
     if (exRows[i][0] === slot && blank(exRows[i][1])) { target = i; break; }
@@ -85,9 +90,13 @@ function ensureExercise(exRows, s) {
 function applyUpserts(logRows, exercisesRows, sets) {
   const log = padLog(logRows);
   const ex = exercisesRows.map((r) => r.slice());
-  let written = 0;
+  const acked = [];
+  const skipped = [];
   for (const s of sets || []) {
-    if (!s || blank(s.id) || blank(s.exercise) || blank(s.reps) || blank(s.date)) continue;
+    if (!s || blank(s.id) || blank(s.exercise) || blank(s.reps) || blank(s.date)) {
+      if (s && !blank(s.id)) skipped.push(String(s.id));
+      continue;
+    }
     let idx = -1;
     for (let i = LOG_FIRST; i < log.length; i++) if (String(log[i][COL.id]) === String(s.id)) { idx = i; break; }
     if (idx === -1) {
@@ -99,9 +108,26 @@ function applyUpserts(logRows, exercisesRows, sets) {
     }
     writeSet(log[idx], s);
     ensureExercise(ex, s);
-    written++;
+    if (!acked.includes(String(s.id))) acked.push(String(s.id));
   }
-  return { logRows: log, exercisesRows: ex, written };
+  return { logRows: log, exercisesRows: ex, written: acked.length, acked, skipped };
+}
+
+/**
+ * Gives every data row that has reps but no set id a generated one (rows typed by hand have none), so the app can
+ * later edit or delete them in place. Returns the new rows and how many ids were assigned. Idempotent.
+ * @param {any[][]} logRows
+ * @param {() => string} genId
+ */
+function assignIds(logRows, genId) {
+  const log = padLog(logRows);
+  let assigned = 0;
+  for (let i = LOG_FIRST; i < log.length; i++) {
+    if (blank(log[i][COL.reps]) || !blank(log[i][COL.id])) continue;
+    log[i][COL.id] = genId();
+    assigned++;
+  }
+  return { logRows: log, assigned };
 }
 
 /** Clear the bridge-owned cells of every row whose id is in `ids`. */
@@ -147,8 +173,8 @@ function readExercises(exercisesRows) {
 
 // ---------------------------------------------------------------------------------------------
 // Entry points. Deploy: Extensions > Apps Script in the Sheet, paste this file, run setup() once
-// (copy the key from the log into the app's Settings), then Deploy > Web app (execute as me,
-// anyone with the link). The key lives only in Script Properties, never in the repo.
+// (copy the key from the log into the app's Settings), then Deploy > New deployment > Web app
+// with "Execute as: Me" and "Who has access: Anyone" (not "Anyone with Google account": fetch cannot sign in). The key lives only in Script Properties, never in the repo.
 // ---------------------------------------------------------------------------------------------
 const LOG_SHEET = 'Log';
 const EX_SHEET = 'Exercises';
@@ -157,9 +183,7 @@ const FORMULA_ROW = 1004; // last preformatted Log row; copied down when the she
 function setup() {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('KEY')) { Logger.log('KEY already set (delete it in Project Settings to rotate).'); return; }
-  const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNPQRSTUVWXYZ23456789';
-  let key = '';
-  for (let i = 0; i < 24; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
+  const key = Utilities.getUuid().replace(/-/g, '').slice(0, 24);
   props.setProperty('KEY', key);
   Logger.log('KEY: ' + key);
 }
@@ -188,10 +212,27 @@ function readBlock_(sheet, width, minRows) {
 
 function doGet(e) {
   if (!keyOk_(e && e.parameter && e.parameter.key)) return json_({ ok: false, error: 'bad key' });
-  const ss = SpreadsheetApp.getActive();
-  const log = readBlock_(ss.getSheetByName(LOG_SHEET), LOG_WIDTH, LOG_FIRST + 1);
-  const ex = readBlock_(ss.getSheetByName(EX_SHEET), 8, EX_FIRST + 1);
-  return json_({ ok: true, log: readLog(log), exercises: readExercises(ex) });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return json_({ ok: false, error: 'busy' });
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const logSheet = ss.getSheetByName(LOG_SHEET);
+    const before = readBlock_(logSheet, LOG_WIDTH, LOG_FIRST + 1);
+    // Rows typed by hand have no set id: give them one now so the app can edit/delete them in place.
+    const { logRows, assigned } = assignIds(before, () => Utilities.getUuid());
+    if (assigned) {
+      for (let i = LOG_FIRST; i < logRows.length; i++) {
+        if (before[i] && before[i][COL.id] !== logRows[i][COL.id]) logSheet.getRange(i + 1, COL.id + 1).setValue(logRows[i][COL.id]);
+      }
+      SpreadsheetApp.flush();
+    }
+    const ex = readBlock_(ss.getSheetByName(EX_SHEET), 8, EX_FIRST + 1);
+    return json_({ ok: true, log: readLog(logRows), exercises: readExercises(ex) });
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message || err) });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function doPost(e) {
@@ -216,11 +257,19 @@ function doPost(e) {
       // No free row left: extend the preformatted rows (formulas, validation, formats) from the last one.
       const need = log.length - logBefore.length;
       const src = logSheet.getRange(FORMULA_ROW, 1, 1, LOG_WIDTH);
-      src.copyTo(logSheet.getRange(logBefore.length + 1, 1, need, LOG_WIDTH));
+      for (let k = 0; k < need; k++) src.copyTo(logSheet.getRange(logBefore.length + 1 + k, 1, 1, LOG_WIDTH));
       // copyTo carried over row-1004 input values; clear the bridge-owned cells again.
       for (const [a, b] of WRITABLE_RUNS) logSheet.getRange(logBefore.length + 1, a + 1, need, b - a + 1).clearContent();
     }
 
+    // Exercises: write only the cells the core may have filled (name B, muscle D), changed rows only.
+    for (let i = EX_FIRST; i < up.exercisesRows.length; i++) {
+      const before = exBefore[i];
+      const after = up.exercisesRows[i];
+      if (!before) { exSheet.getRange(i + 1, 1, 1, 8).setValues([after]); continue; }
+      if (before[1] !== after[1]) exSheet.getRange(i + 1, 2).setValue(after[1]);
+      if (before[3] !== after[3]) exSheet.getRange(i + 1, 4).setValue(after[3]);
+    }
     const tz = tz_();
     for (let i = LOG_FIRST; i < log.length; i++) {
       const before = logBefore[i];
@@ -235,16 +284,8 @@ function doPost(e) {
       }
     }
 
-    // Exercises: write only the cells the core may have filled (name B, muscle D), changed rows only.
-    for (let i = EX_FIRST; i < up.exercisesRows.length; i++) {
-      const before = exBefore[i];
-      const after = up.exercisesRows[i];
-      if (!before) { exSheet.getRange(i + 1, 1, 1, 8).setValues([after]); continue; }
-      if (before[1] !== after[1]) exSheet.getRange(i + 1, 2).setValue(after[1]);
-      if (before[3] !== after[3]) exSheet.getRange(i + 1, 4).setValue(after[3]);
-    }
     SpreadsheetApp.flush();
-    return json_({ ok: true, written: up.written });
+    return json_({ ok: true, written: up.written, acked: up.acked, skipped: up.skipped, deleted: (body.deletes || []).map(String) });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
   } finally {

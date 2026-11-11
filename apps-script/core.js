@@ -34,14 +34,18 @@ function padLog(rows) {
 }
 
 function isFreeLogRow(r) {
-  return blank(r[COL.date]) && blank(r[COL.exercise]) && blank(r[COL.kg]) && blank(r[COL.reps]);
+  // Every bridge-owned input cell must be empty, so a hand-typed spacer (Day, RIR or Note only) is kept.
+  return [COL.date, COL.day, COL.exercise, COL.kg, COL.reps, COL.rir, COL.note, COL.id].every((c) => blank(r[c]));
 }
+
+/** App slots that do not exist in the Sheet's Exercises tab, mapped to the closest Sheet slot. */
+export const SLOT_ALIASES = { 'Lat isolation': 'Back finisher' };
 
 function writeSet(row, s) {
   row[COL.date] = s.date;
   row[COL.day] = s.day ?? '';
   row[COL.exercise] = s.exercise;
-  row[COL.kg] = Number(s.kg);
+  row[COL.kg] = blank(s.kg) || !Number.isFinite(Number(s.kg)) ? 0 : Number(s.kg);
   row[COL.reps] = Number(s.reps);
   row[COL.rir] = blank(s.rir) ? '' : s.rir;
   row[COL.note] = s.note ?? '';
@@ -52,7 +56,8 @@ function ensureExercise(exRows, s) {
   const name = String(s.exercise).trim();
   const key = norm(name);
   for (let i = EX_FIRST; i < exRows.length; i++) if (norm(exRows[i][1]) === key) return;
-  const slot = s.slot && exRows.some((r, i) => i >= EX_FIRST && r[0] === s.slot) ? s.slot : 'Other';
+  const wanted = SLOT_ALIASES[s.slot] && !exRows.some((r, i) => i >= EX_FIRST && r[0] === s.slot) ? SLOT_ALIASES[s.slot] : s.slot;
+  const slot = wanted && exRows.some((r, i) => i >= EX_FIRST && r[0] === wanted) ? wanted : 'Other';
   let target = -1;
   for (let i = EX_FIRST; i < exRows.length; i++) {
     if (exRows[i][0] === slot && blank(exRows[i][1])) { target = i; break; }
@@ -81,9 +86,13 @@ function ensureExercise(exRows, s) {
 export function applyUpserts(logRows, exercisesRows, sets) {
   const log = padLog(logRows);
   const ex = exercisesRows.map((r) => r.slice());
-  let written = 0;
+  const acked = [];
+  const skipped = [];
   for (const s of sets || []) {
-    if (!s || blank(s.id) || blank(s.exercise) || blank(s.reps) || blank(s.date)) continue;
+    if (!s || blank(s.id) || blank(s.exercise) || blank(s.reps) || blank(s.date)) {
+      if (s && !blank(s.id)) skipped.push(String(s.id));
+      continue;
+    }
     let idx = -1;
     for (let i = LOG_FIRST; i < log.length; i++) if (String(log[i][COL.id]) === String(s.id)) { idx = i; break; }
     if (idx === -1) {
@@ -95,9 +104,26 @@ export function applyUpserts(logRows, exercisesRows, sets) {
     }
     writeSet(log[idx], s);
     ensureExercise(ex, s);
-    written++;
+    if (!acked.includes(String(s.id))) acked.push(String(s.id));
   }
-  return { logRows: log, exercisesRows: ex, written };
+  return { logRows: log, exercisesRows: ex, written: acked.length, acked, skipped };
+}
+
+/**
+ * Gives every data row that has reps but no set id a generated one (rows typed by hand have none), so the app can
+ * later edit or delete them in place. Returns the new rows and how many ids were assigned. Idempotent.
+ * @param {any[][]} logRows
+ * @param {() => string} genId
+ */
+export function assignIds(logRows, genId) {
+  const log = padLog(logRows);
+  let assigned = 0;
+  for (let i = LOG_FIRST; i < log.length; i++) {
+    if (blank(log[i][COL.reps]) || !blank(log[i][COL.id])) continue;
+    log[i][COL.id] = genId();
+    assigned++;
+  }
+  return { logRows: log, assigned };
 }
 
 /** Clear the bridge-owned cells of every row whose id is in `ids`. */

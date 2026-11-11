@@ -64,36 +64,53 @@ async function doFlush(fetchFn: typeof fetch): Promise<{ sent: number; ok: boole
   const settings = await loadSettings();
   if (!settings.scriptUrl || !settings.scriptKey) return { sent: 0, ok: false };
   let sent = 0;
+  const held = new Set<string>(); // entries the bridge did not acknowledge: stay queued, retried by a later flush
   while (true) {
-    const batch = (await getAll<QueueItem>('queue')).slice(0, BATCH_SIZE);
-    if (batch.length === 0) {
-      failures = 0;
-      return { sent, ok: true };
-    }
+    const batch = (await getAll<QueueItem>('queue')).filter((q) => !held.has(q.id)).slice(0, BATCH_SIZE);
+    if (batch.length === 0) break;
     const upserts: SheetSet[] = [];
     const deletes: string[] = [];
     const sentSets = new Map<string, number>(); // id -> updatedAt that was sent
+    const orphans: string[] = []; // queue entries whose set no longer exists: nothing to send
     for (const q of batch) {
       const set = await get<SetLog>('sets', q.id);
-      if (!set) continue; // nothing to send; the queue entry is dropped below
+      if (!set) {
+        orphans.push(q.id);
+        continue;
+      }
       sentSets.set(set.id, set.updatedAt);
       if (q.op === 'delete' || set.deleted || set.warmup) deletes.push(q.id);
       else upserts.push(await toSheetSet(set));
     }
+    let acked = new Set<string>(orphans);
     if (upserts.length || deletes.length) {
-      const ok = await post(fetchFn, settings.scriptUrl, { key: settings.scriptKey, upserts, deletes });
-      if (!ok) {
+      const data = await post(fetchFn, settings.scriptUrl, { key: settings.scriptKey, upserts, deletes });
+      if (!data) {
         failures++;
         scheduleRetry();
         return { sent, ok: false };
       }
+      // Only ids the bridge lists as written (acked) or cleared (deleted) count; anything else is kept.
+      for (const id of data.acked ?? []) acked.add(String(id));
+      for (const id of data.deleted ?? []) acked.add(String(id));
     }
-    await confirm(batch, sentSets);
-    sent += batch.length;
+    const done = batch.filter((q) => acked.has(q.id));
+    for (const q of batch) if (!acked.has(q.id)) held.add(q.id);
+    await confirm(done, sentSets);
+    sent += done.length;
   }
+  if (held.size > 0) {
+    failures++;
+    scheduleRetry();
+    return { sent, ok: false };
+  }
+  failures = 0;
+  return { sent, ok: true };
 }
 
-async function post(fetchFn: typeof fetch, url: string, body: unknown): Promise<boolean> {
+interface BridgeReply { ok?: boolean; acked?: string[]; skipped?: string[]; deleted?: string[] }
+
+async function post(fetchFn: typeof fetch, url: string, body: unknown): Promise<BridgeReply | null> {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS) : undefined;
   try {
@@ -104,11 +121,11 @@ async function post(fetchFn: typeof fetch, url: string, body: unknown): Promise<
       redirect: 'follow',
       signal: ctrl?.signal,
     });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { ok?: boolean };
-    return data?.ok === true;
+    if (!res.ok) return null;
+    const data = (await res.json()) as BridgeReply;
+    return data?.ok === true ? data : null;
   } catch {
-    return false;
+    return null;
   } finally {
     if (timer) clearTimeout(timer);
   }

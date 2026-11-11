@@ -1,5 +1,5 @@
 // @ts-ignore plain JS module shared with Apps Script
-import { applyUpserts, applyDeletes, readLog, readExercises, LOG_WIDTH, LOG_FIRST } from '../apps-script/core.js';
+import { applyUpserts, applyDeletes, assignIds, readLog, readExercises, LOG_WIDTH, LOG_FIRST } from '../apps-script/core.js';
 import { readFileSync } from 'node:fs';
 
 type Row = any[];
@@ -129,5 +129,68 @@ describe('sheet core', () => {
     const gs = readFileSync('apps-script/Code.gs', 'utf8');
     expect(gs).toMatch(/getProperty\('KEY'\)/);
     expect(gs).not.toMatch(/KEY\s*=\s*['"][A-Za-z0-9]{8,}/);
+  });
+});
+
+describe('bridge review fixes', () => {
+  const handRow = (log: Row[], i: number, o: Record<number, any>) => { for (const [c, v] of Object.entries(o)) log[LOG_FIRST + i][Number(c)] = v; };
+
+  it('assignIds gives each id-less data row a unique id, keeps existing ids, is idempotent', () => {
+    const log = blankLog();
+    handRow(log, 0, { 0: '2026-11-09', 1: 'Chest+Back A', 2: 'Smith flat press', 5: 40, 6: 10 });
+    handRow(log, 1, { 5: 40, 6: 9 }); // continuation row
+    handRow(log, 2, { 5: 40, 6: 8, 27: 'keep-me' });
+    handRow(log, 3, { 0: '2026-11-09', 2: 'No reps yet' }); // not a set
+    let n = 0;
+    const a = assignIds(log, () => `gen-${++n}`);
+    expect(a.assigned).toBe(2);
+    expect(a.logRows[LOG_FIRST][27]).toBe('gen-1');
+    expect(a.logRows[LOG_FIRST + 1][27]).toBe('gen-2');
+    expect(a.logRows[LOG_FIRST + 2][27]).toBe('keep-me');
+    expect(a.logRows[LOG_FIRST + 3][27]).toBe('');
+    const b = assignIds(a.logRows, () => `gen-${++n}`);
+    expect(b.assigned).toBe(0);
+    expect(readLog(b.logRows).map((r: any) => r.id)).toEqual(['gen-1', 'gen-2', 'keep-me']);
+  });
+
+  it('an edit or delete of an id-assigned row hits the same row (no duplicate)', () => {
+    const log = blankLog();
+    handRow(log, 0, { 0: '2026-11-09', 1: 'Chest+Back A', 2: 'Pec fly machine', 5: 40, 6: 10 });
+    const { logRows } = assignIds(log, () => 'gen-1');
+    const up = applyUpserts(logRows, exercises(), [set({ id: 'gen-1', reps: 12 })]);
+    expect(readLog(up.logRows)).toHaveLength(1);
+    expect(readLog(up.logRows)[0].reps).toBe(12);
+    expect(readLog(applyDeletes(up.logRows, ['gen-1']))).toHaveLength(0);
+  });
+
+  it('maps app slots missing from the Sheet (Lat isolation -> Back finisher) before falling back to Other', () => {
+    const ex = [...exercises(), exRow('Back finisher', 'Straight-arm pulldown', 'Back'), exRow('Back finisher', '')];
+    const r = applyUpserts(blankLog(), ex, [set({ exercise: 'Straight-arm cable pulldown', slot: 'Lat isolation', muscle: 'Back' })]);
+    const idx = r.exercisesRows.findIndex((x: Row) => x[1] === 'Straight-arm cable pulldown');
+    expect(r.exercisesRows[idx][0]).toBe('Back finisher');
+  });
+
+  it('reports acked and skipped ids; a missing kg is 0', () => {
+    const r = applyUpserts(blankLog(), exercises(), [set({ id: 'ok', kg: undefined }), set({ id: 'bad', reps: '' }), set({ id: 'ok', kg: undefined })]);
+    expect(r.acked).toEqual(['ok']);
+    expect(r.skipped).toEqual(['bad']);
+    expect(r.written).toBe(1);
+    expect(r.logRows[LOG_FIRST][5]).toBe(0);
+  });
+
+  it('a row with only Day, RIR or Note typed in is not treated as free', () => {
+    const log = blankLog();
+    handRow(log, 0, { 1: 'Chest+Back A' });
+    handRow(log, 1, { 9: 'spacer note' });
+    const r = applyUpserts(log, exercises(), [set()]);
+    expect(r.logRows[LOG_FIRST + 2][27]).toBe('s1');
+    expect(r.logRows[LOG_FIRST][1]).toBe('Chest+Back A');
+  });
+
+  it('Code.gs deploy comment names the real access option and the key is not made with Math.random', () => {
+    const gs = readFileSync('apps-script/Code.gs', 'utf8');
+    expect(gs).toContain('Execute as: Me');
+    expect(gs).toContain('Who has access: Anyone');
+    expect(gs).not.toContain('Math.random');
   });
 });

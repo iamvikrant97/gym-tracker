@@ -12,7 +12,16 @@ const mk = (id: string, over: Partial<SetLog> = {}): SetLog => ({
 });
 const enqueue = (s: SetLog, op: QueueItem['op'] = 'upsert') =>
   putAll([{ store: 'sets', value: s }, { store: 'queue', value: { id: s.id, op } }]);
-const okFetch = (body: unknown = { ok: true }) => vi.fn(async (..._a: Parameters<typeof fetch>) => ({ ok: true, json: async () => body }) as Response);
+/** Mock bridge: with no explicit body it acknowledges every id it was sent, like the real script. */
+const okFetch = (body?: unknown) =>
+  vi.fn(async (...a: Parameters<typeof fetch>) => {
+    let res = body;
+    if (res === undefined) {
+      const req = JSON.parse((a[1] as RequestInit).body as string);
+      res = { ok: true, acked: req.upserts.map((u: { id: string }) => u.id), skipped: [], deleted: req.deletes };
+    }
+    return { ok: true, json: async () => res } as Response;
+  });
 const bodyOf = (f: { mock: { calls: unknown[][] } }, i = 0) => JSON.parse((f.mock.calls[i][1] as RequestInit).body as string);
 const queue = () => getAll<QueueItem>('queue');
 const sets = () => getAll<SetLog>('sets');
@@ -123,12 +132,31 @@ describe('flush', () => {
     let n = 0;
     const f = vi.fn(async (..._a: Parameters<typeof fetch>) => {
       if (n++ === 0) await enqueue({ ...s, reps: 12, updatedAt: 5 });
-      return { ok: true, json: async () => ({ ok: true }) } as Response;
+      const req = JSON.parse((_a[1] as RequestInit).body as string);
+      return { ok: true, json: async () => ({ ok: true, acked: req.upserts.map((u: { id: string }) => u.id), deleted: req.deletes }) } as Response;
     });
     await flush(f);
     expect(f).toHaveBeenCalledTimes(2);
     expect(bodyOf(f, 1).upserts[0].reps).toBe(12);
     expect(await queue()).toEqual([]);
+  });
+
+  it('only sets the bridge acknowledges are marked synced; skipped ones stay queued and flush reports not ok', async () => {
+    await enqueue(mk('good'));
+    await enqueue(mk('bad'));
+    const f = okFetch({ ok: true, acked: ['good'], skipped: ['bad'], deleted: [] });
+    const r = await flush(f);
+    expect(r).toEqual({ sent: 1, ok: false });
+    expect(f).toHaveBeenCalledTimes(1); // no endless retry loop within one flush
+    expect(await queue()).toEqual([{ id: 'bad', op: 'upsert' }]);
+    const byId = Object.fromEntries((await sets()).map((s) => [s.id, s.synced]));
+    expect(byId).toEqual({ good: true, bad: false });
+  });
+
+  it('a response without an acked list acknowledges nothing', async () => {
+    await enqueue(mk('a'));
+    expect(await flush(okFetch({ ok: true }))).toEqual({ sent: 0, ok: false });
+    expect(await queue()).toHaveLength(1);
   });
 
   it('empty queue sends nothing', async () => {
@@ -168,6 +196,24 @@ describe('importFromSheet', () => {
     expect(f2).not.toHaveBeenCalled();
     expect(await sets()).toHaveLength(3);
     expect(await getAll('customExercises')).toHaveLength(1);
+  });
+
+  it('keeps the ids the bridge assigned to hand-typed rows, so a later edit/delete targets the same Sheet row', async () => {
+    const withIds = { ok: true, log: [
+      { id: 'gen-1', date: '2026-11-09', day: 'Chest+Back A', exercise: 'Smith flat press', kg: 40, reps: 10 },
+      { id: 'gen-2', date: '2026-11-09', day: 'Chest+Back A', exercise: 'Smith flat press', kg: 40, reps: 9 },
+    ] };
+    await importFromSheet(okFetch(withIds));
+    expect((await sets()).map((s) => s.id).sort()).toEqual(['gen-1', 'gen-2']);
+    // editing an imported set sends an upsert with that same id
+    const s = (await sets()).find((x) => x.id === 'gen-1')!;
+    await enqueue({ ...s, reps: 11, updatedAt: s.updatedAt + 1, synced: false });
+    const f = okFetch();
+    await flush(f);
+    expect(bodyOf(f).upserts[0]).toMatchObject({ id: 'gen-1', reps: 11 });
+    // second import is a no-op
+    expect(await importFromSheet(okFetch(withIds))).toEqual({ imported: 0 });
+    expect(await sets()).toHaveLength(2);
   });
 
   it('does nothing when the app already has sets', async () => {
