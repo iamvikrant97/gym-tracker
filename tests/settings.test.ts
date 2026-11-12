@@ -6,6 +6,7 @@ import type { QueueItem } from '../src/lib/db';
 import { exportAll, restoreBackup } from '../src/lib/backup';
 import { _resetSyncState } from '../src/lib/sync';
 import { WorkoutStore, workout } from '../src/lib/workout.svelte';
+import { toasts, clearToast } from '../src/ui/toast.svelte';
 import Settings from '../src/screens/Settings.svelte';
 import type { Exercise, SetLog, Workout } from '../src/lib/types';
 
@@ -164,5 +165,55 @@ describe('Settings screen', () => {
   it('shows version and build date', async () => {
     render(Settings);
     expect(await screen.findByText(/Version \d+\.\d+\.\d+ · built \d{4}-\d{2}-\d{2}/)).toBeTruthy();
+  });
+});
+
+describe('Find duplicate sets', () => {
+  const dup = (id: string, o: Partial<SetLog> = {}) => mk(id, { date: '2026-11-09', ...o });
+  const seedDupes = async () => {
+    await put('sets', dup('import-2026-11-09-converging-chest-press-1', { synced: false }));
+    await put('sets', dup('sheet-uuid-1'));
+    await put('sets', dup('import-2026-11-09-converging-chest-press-2', { setNo: 2, synced: false }));
+    await put('sets', dup('sheet-uuid-2', { setNo: 2 }));
+    await put('sets', mk('today-1', { date: '2026-11-12' }));
+  };
+
+  it('lists the duplicates per day, removes them only after Confirm, then toasts the count', async () => {
+    clearToast();
+    await seedDupes();
+    render(Settings);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find duplicate sets' }));
+    expect(await screen.findByText('9 Nov: 2 duplicates')).toBeTruthy();
+    // Nothing is changed until the user confirms.
+    expect((await getAll<SetLog>('sets')).every((x) => !x.deleted)).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove 2 duplicate sets' }));
+    await waitFor(() => expect(toasts.message).toBe('Removed 2 duplicate sets'));
+    const sets = await getAll<SetLog>('sets');
+    expect(sets.filter((x) => x.deleted).map((x) => x.id).sort()).toEqual([
+      'import-2026-11-09-converging-chest-press-1', 'import-2026-11-09-converging-chest-press-2',
+    ]);
+    expect(sets.find((x) => x.id === 'today-1')?.deleted).toBe(false);
+    expect((await getAll<QueueItem>('queue')).map((q) => `${q.id}:${q.op}`).sort()).toEqual([
+      'import-2026-11-09-converging-chest-press-1:delete', 'import-2026-11-09-converging-chest-press-2:delete',
+    ]);
+    // Second run: nothing left.
+    await fireEvent.click(screen.getByRole('button', { name: 'Find duplicate sets' }));
+    expect(await screen.findByText('No duplicate sets found')).toBeTruthy();
+  });
+
+  it('Cancel leaves everything as it was', async () => {
+    await seedDupes();
+    render(Settings);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find duplicate sets' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: /Remove \d+ duplicate/ })).toBeNull();
+    expect((await getAll<SetLog>('sets')).every((x) => !x.deleted)).toBe(true);
+  });
+
+  it('says so when there are none', async () => {
+    await put('sets', mk('a'));
+    render(Settings);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find duplicate sets' }));
+    expect(await screen.findByText('No duplicate sets found')).toBeTruthy();
   });
 });

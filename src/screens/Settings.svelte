@@ -7,6 +7,8 @@
   } from '../lib/sync';
   import type { SyncState } from '../lib/sync';
   import { backupFileName, exportAll, restoreBackup } from '../lib/backup';
+  import { duplicateGroups, removeDuplicates } from '../lib/dedupe';
+  import type { SetLog } from '../lib/types';
   import { redirectUri, disconnect } from '../lib/spotify/auth';
   import { spotify } from '../lib/spotify/player.svelte';
   import { workout, MAX_REST_SEC } from '../lib/workout.svelte';
@@ -216,6 +218,30 @@
     showToast(`${ex.name} added`);
   }
 
+  // ---- duplicate sets ----
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  let dupes = $state<{ date: string; count: number }[] | null>(null);
+  const dupTotal = $derived(dupes?.reduce((n, d) => n + d.count, 0) ?? 0);
+  const dayLabel = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
+  async function findDupes() {
+    try {
+      dupes = duplicateGroups(await getAll<SetLog>('sets'));
+    } catch {
+      dupes = null;
+      backupMsg = { text: 'Could not read the sets on this phone', bad: true };
+    }
+  }
+  async function confirmDupes() {
+    try {
+      const n = await removeDuplicates();
+      dupes = null;
+      await workout.refreshShared();
+      showToast(`Removed ${n} duplicate set${n === 1 ? '' : 's'}`);
+    } catch {
+      backupMsg = { text: 'Could not remove the duplicates. Nothing was lost', bad: true };
+    }
+  }
+
   // ---- backup ----
   async function exportFile() {
     try {
@@ -367,6 +393,23 @@
     <button class="secondary wide press" type="button" onclick={() => fileInput?.click()}>Import backup file</button>
     <input bind:this={fileInput} class="sr-only" type="file" accept="application/json,.json" aria-label="Backup file" onchange={importFile} />
     {#if backupMsg}<p class="msg" class:bad={backupMsg.bad} role="status">{backupMsg.text}</p>{/if}
+
+    <h3 class="sub">Duplicate sets</h3>
+    <p class="hint">If a day shows every set twice (a backup and the Sheet were both imported), this removes the extra copies. The Sheet rows are cleared too.</p>
+    <button class="secondary wide press" type="button" onclick={findDupes}>Find duplicate sets</button>
+    {#if dupes !== null}
+      {#if dupTotal === 0}
+        <p class="msg" role="status">No duplicate sets found</p>
+      {:else}
+        <ul class="dups">
+          {#each dupes as d (d.date)}<li>{dayLabel(d.date)}: {d.count} duplicate{d.count === 1 ? '' : 's'}</li>{/each}
+        </ul>
+        <div class="pair">
+          <button class="secondary press" type="button" onclick={() => (dupes = null)}>Cancel</button>
+          <button class="primary press" type="button" onclick={confirmDupes}>Remove {dupTotal} duplicate set{dupTotal === 1 ? '' : 's'}</button>
+        </div>
+      {/if}
+    {/if}
   </article>
 
   <p class="about">Version {__APP_VERSION__} · built {__BUILD_DATE__}</p>
@@ -403,6 +446,9 @@
   .pair > * { flex: 1; }
   .msg { margin: 0; font-size: 13px; color: var(--text); }
   .msg.bad { color: var(--amber); }
+  .sub { margin: 8px 0 0; font: 600 14px/1.2 var(--body); }
+  .dups { margin: 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 4px; }
+  .pair > .primary { width: auto; height: 48px; font-size: 14px; }
   .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
   .copyrow { display: flex; gap: 8px; align-items: center; }
   code {

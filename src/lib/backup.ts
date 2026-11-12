@@ -2,6 +2,7 @@
 // Secrets (script key, Spotify login) are left out of the file: they are typed in again in Settings.
 import { getAll, loadSettings, openDb, updateSettings } from './db';
 import type { QueueItem } from './db';
+import { contentKey } from './dedupe';
 import { scheduleFlush } from './sync';
 import type { Exercise, SetLog, Settings, Workout } from './types';
 
@@ -81,9 +82,19 @@ export async function restoreBackup(input: string | unknown): Promise<RestoreRes
     names.add(e.name.trim().toLowerCase());
     out.exercises++;
   }
+  // A set whose content (date, exercise, set no., kg, reps, warm-up) is already here under another id is the same
+  // set (e.g. the Sheet was imported first): skip it, so restoring can never double a day.
+  const liveKeys = new Map<string, string>(); // content key -> id
+  for (const x of (await setStore.getAll()) as SetLog[]) if (!x.deleted) liveKeys.set(contentKey(x), x.id);
   for (const s of sets) {
     const cur = (await setStore.get(s.id)) as SetLog | undefined;
     if (cur && cur.updatedAt >= s.updatedAt) continue;
+    if (!s.deleted) {
+      const key = contentKey(s);
+      const holder = liveKeys.get(key);
+      if (holder !== undefined && holder !== s.id) continue;
+      liveKeys.set(key, s.id);
+    }
     await setStore.put(s);
     if (!s.synced) {
       await queue.put({ id: s.id, op: s.deleted ? 'delete' : 'upsert' } satisfies QueueItem);
