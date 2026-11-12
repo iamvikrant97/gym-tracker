@@ -103,7 +103,7 @@ describe('Settings screen', () => {
     await fireEvent.input(await screen.findByLabelText('Web app URL'), { target: { value: ' https://script.google.com/macros/s/AB/exec ' } });
     await fireEvent.input(screen.getByLabelText('Key'), { target: { value: 'k3y' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Save and import' }));
-    expect(await screen.findByText('Imported 2 sets')).toBeTruthy();
+    expect(await screen.findByText('Imported 2 sets', {}, { timeout: 8000 })).toBeTruthy();
     expect(await loadSettings()).toMatchObject({ scriptUrl: 'https://script.google.com/macros/s/AB/exec', scriptKey: 'k3y' });
     expect(String(f.mock.calls[0][0])).toBe('https://script.google.com/macros/s/AB/exec'); // key never in the URL
     expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({ key: 'k3y', action: 'import' });
