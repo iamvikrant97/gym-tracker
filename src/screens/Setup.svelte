@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { listExercises } from '../lib/db';
   import { EXERCISES } from '../lib/seed';
-  import { GREET_MAX, cleanGreetName } from '../lib/greeting';
+  import { GREET_MAX, cleanGreetName, sanitizeGreetNames } from '../lib/greeting';
+  import { clearPendingInvite, type Invite } from '../lib/invite';
   import { DAY_LONG, DAY_SHORT, PLAN_CARDS, WEEK_ORDER, daysLabel, defaultDays, sortDays, suggestedPlanFor, type PlanChoice } from '../lib/planSetup';
   import { currentPlan, planFromTemplate, resolvePlan, VIK_PLAN, type TemplatePlanId } from '../lib/seed';
   import { weekSchedule } from '../lib/selection';
@@ -16,7 +17,7 @@
    * First-run setup, and "Change plan" in Settings. firstRun: no back button on the first step and the greeting
    * name is cleared; otherwise the first step goes back to Settings.
    */
-  let { firstRun = true, onfinish, oncancel, onrestore }: { firstRun?: boolean; onfinish: () => void; oncancel?: () => void; onrestore?: () => void } = $props();
+  let { firstRun = true, invite = null, onfinish, oncancel, onrestore }: { firstRun?: boolean; invite?: Invite | null; onfinish: () => void; oncancel?: () => void; onrestore?: () => void } = $props();
 
   type Step = 'days' | 'plan' | 'build' | 'review';
   type Choice = PlanChoice;
@@ -44,7 +45,11 @@
   let creating = $state(false);
   let saving = $state(false);
   let error = $state('');
-  let callMe = $state('');
+  // A personal invite link pre-fills the name; its greeting names are kept in memory until Start.
+  // svelte-ignore state_referenced_locally
+  let callMe = $state(firstRun ? (invite?.userName ?? '') : '');
+  // svelte-ignore state_referenced_locally
+  const inviteNames = firstRun ? sanitizeGreetNames(invite?.greetNames) : undefined; // a plain copy, safe for storage
 
   // The number of days from step 1 steers which card is highlighted; any plan can still be picked.
   const suggestedId = $derived(suggestedPlanFor(count));
@@ -160,11 +165,13 @@
         return {
           ...cur,
           ...(userName ? { userName } : {}), // never saves an empty name
+          ...(inviteNames ? { greetNames: inviteNames } : {}),
           plan,
           weeklyTarget: plan.weeklyTarget,
           retiredSessions: retired,
         };
       });
+      if (firstRun) clearPendingInvite();
       onfinish();
     } catch {
       error = 'Could not save your plan. Try again';

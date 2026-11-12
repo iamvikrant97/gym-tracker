@@ -5,7 +5,8 @@ The app keeps everything on your phone. You do not need an account.
 ## 1. Install it
 
 1. On your phone, open **Chrome** (not Samsung Internet).
-2. Go to **https://iamvikrant97.github.io/gym-tracker/**
+2. Open your personal link (it already knows your name):
+   **https://iamvikrant97.github.io/gym-tracker/#/?name=Minal&morning=Cutie&afternoon=Minal&evening=CutieChan&night=Cutiechan**
 3. Tap the **three dots** (top right), then **Add to Home screen** (on some phones: **Install app**), then **Install**.
 4. Open **Gym** from your home screen from now on.
 5. Open it once with internet before your first gym visit. After that it works without signal.

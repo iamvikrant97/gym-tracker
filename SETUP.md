@@ -141,3 +141,28 @@ Your data lives on the phone first, and in the Sheet. Clearing Chrome's data for
 - **Suggested playlists are community playlists.** Spotify does not let new apps see its own editorial playlists, so "For your workout" shows popular user-made gym playlists. Pin the ones you like.
 - **Editing the Sheet by hand is not copied back** to the app. Make changes in the app. New rows typed in the Sheet can be pulled in with **Save and import**.
 - **The app needs Chrome on Android** to install. Other browsers may work but are not tested.
+
+
+---
+
+## Personal invite link (optional)
+
+You can send someone a link that fills in their greeting names the first time they open the app. Make it with:
+
+```
+node tools/invite-link.mjs --name Minal --morning Cutie --afternoon Minal --evening CutieChan --night Cutiechan
+```
+
+It prints, for example:
+
+```
+https://iamvikrant97.github.io/gym-tracker/#/?name=Minal&morning=Cutie&afternoon=Minal&evening=CutieChan&night=Cutiechan
+```
+
+Use this form (names after `#/?`). It also works on any hash route (`#/progress?name=...`) and as a normal query before the hash (`/gym-tracker/?name=Minal#/`), but the `#/?` form is the one to share: the part after `#` never goes to the network, so the offline service worker cannot get in the way.
+
+- Options: `--name`, `--morning`, `--afternoon`, `--evening`, `--night` (use any of them, at least one). Each is plain text, at most 20 characters; spaces and symbols are encoded for you.
+- It only has an effect on a **first-run** install (setup would show). The name pre-fills "What should I call you?" and the four greeting names are saved when the person taps **Start**. She can still change the name.
+- An install that already has a plan or data ignores the parameters completely and nothing is overwritten.
+- The names are removed from the address bar as soon as the app reads them and are kept on the phone until **Start**, so a refresh or closing the app in the middle of setup is fine.
+- Open the link in Chrome on the phone, then use **Add to Home screen**. The installed app shares Chrome's saved names on Android. (On iPhone the installed app has separate storage, so open the link from the Home screen app itself.)

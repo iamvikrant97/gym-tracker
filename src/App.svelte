@@ -12,6 +12,7 @@
   import Setup from './screens/Setup.svelte';
   import Restore from './screens/Restore.svelte';
   import { initPlan, type PlanGate } from './lib/planSetup';
+  import { clearPendingInvite, loadPendingInvite, parseInvite, savePendingInvite, stripInviteFromAddress, type Invite } from './lib/invite';
   import { lastSyncAt, onImported, onSyncChange, startAutoSync, syncLabel, syncStatus } from './lib/sync';
   import RestDock from './ui/RestDock.svelte';
   import { watchWorkout } from './lib/session.svelte';
@@ -36,11 +37,27 @@
   // an install that already has sets or workouts is Vik's and gets plan 'vik' silently (see initPlan).
   let gate = $state<'loading' | 'error' | PlanGate>('loading');
   let restoring = $state(false);
+  // A personal invite link (names in the address) is read once; it only matters on a first-run install.
+  const invited = parseInvite(location.search, location.hash);
+  let invite = $state.raw<Invite | null>(null);
+  /** First run: keep the names (so a reload mid-setup still has them). Any other install: drop them, change nothing. */
+  function settleInvite(g: PlanGate) {
+    if (g === 'setup') {
+      if (invited) savePendingInvite(invited);
+      invite = invited ?? loadPendingInvite();
+    } else {
+      clearPendingInvite();
+      invite = null;
+    }
+    stripInviteFromAddress();
+    route = parseRoute(location.hash);
+  }
   const setupOpen = $derived(gate === 'setup' || (gate === 'ready' && route === 'setup'));
   /** Called after a restore or Sheet import: if there is data now, the install is Vik's and Home opens. */
   async function recheck(): Promise<boolean> {
     const g = await initPlan();
     if (g !== 'ready') return false;
+    settleInvite(g);
     await workout.refreshShared().catch(() => undefined);
     restoring = false;
     gate = 'ready';
@@ -53,12 +70,15 @@
     // Home opens only once the store has the settings too, so a new install never flashes the original greeting.
     initPlan()
       .then(async (g) => {
+        settleInvite(g);
         if (g === 'ready') await workout.refreshShared().catch(() => undefined);
         gate = g;
       })
       .catch(() => (gate = 'error')); // a failed read must never look like Vik's install
   }
   function finishSetup() {
+    clearPendingInvite();
+    invite = null;
     gate = 'ready';
     location.hash = '#/';
     route = 'home';
@@ -109,7 +129,7 @@
   {:else if gate === 'setup' && restoring}
     <Restore onback={() => (restoring = false)} onrecheck={recheck} />
   {:else if setupOpen}
-    <Setup firstRun={gate === 'setup'} onfinish={finishSetup} oncancel={() => (location.hash = '#/settings')} onrestore={() => (restoring = true)} />
+    <Setup firstRun={gate === 'setup'} invite={gate === 'setup' ? invite : null} onfinish={finishSetup} oncancel={() => (location.hash = '#/settings')} onrestore={() => (restoring = true)} />
   {:else if Screen}
     <Screen syncStatus={sync.text} syncWarn={sync.warn} />
   {:else}
