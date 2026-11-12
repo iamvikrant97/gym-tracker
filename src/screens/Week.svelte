@@ -1,9 +1,11 @@
 <script lang="ts">
   import { DEFAULT_SETTINGS, getAll, loadSettings } from '../lib/db';
   import { exerciseById } from '../lib/seed';
-  import { daysSince, visitKeysInWeek, weekStart, weeklySets } from '../lib/stats';
+  import { dayVisits, daysSince, visitKeysInWeek, weekStart, weeklySets } from '../lib/stats';
   import type { Exercise, Muscle, SetLog, Settings, Workout } from '../lib/types';
   import { localDate, workout } from '../lib/workout.svelte';
+  import { fmtKg } from '../lib/workoutView';
+  import Sheet from '../ui/Sheet.svelte';
 
   // App passes syncStatus / syncWarn to every screen; this one has no sync indicator, so they are ignored.
 
@@ -66,6 +68,17 @@
     return d === null ? 'Not trained yet' : d === 0 ? 'Trained today' : d === 1 ? 'Trained yesterday' : `Trained ${d} days ago`;
   }
 
+  // Tap a trained day: bottom sheet with that day's workout(s).
+  let picked = $state<string | null>(null);
+  let shown = $state<string | null>(null); // kept while the sheet slides out, so its content does not vanish mid-animation
+  const visits = $derived(shown ? dayVisits(shown, workouts, sets, lookup) : []);
+  const pickedLabel = $derived(calendar.find((c) => c.date === shown)?.label ?? '');
+  const num = (n: number) => Math.round(n).toLocaleString('en-IN');
+  function openDay(date: string) {
+    shown = date;
+    picked = date;
+  }
+
   async function togglePause() {
     settings = await workout.updateSettings((cur) => ({ ...cur, paused: !cur.paused }));
   }
@@ -107,19 +120,53 @@
   </div>
   <div class="cal" role="grid" aria-label="Training days, last 8 weeks">
     {#each calendar as c (c.date)}
-      <span
-        class="day"
-        class:on={c.trained}
-        class:future={c.future}
-        class:today={c.isToday}
-        role="gridcell"
-        aria-label="{c.label}{c.trained ? ', trained' : ''}"
-        data-date={c.date}
-        data-trained={c.trained}
-      >{c.dom}</span>
+      <div class="cell" role="gridcell">
+        {#if c.trained}
+          <button
+            type="button"
+            class="day on press"
+            class:today={c.isToday}
+            aria-label="{c.label}, trained, view summary"
+            data-date={c.date}
+            data-trained="true"
+            onclick={() => openDay(c.date)}
+          >{c.dom}</button>
+        {:else}
+          <span
+            class="day"
+            class:future={c.future}
+            class:today={c.isToday}
+            aria-label={c.label}
+            role="img"
+            data-date={c.date}
+            data-trained="false"
+          >{c.dom}</span>
+        {/if}
+      </div>
     {/each}
   </div>
 </section>
+
+<Sheet open={picked !== null} onclose={() => (picked = null)} title={pickedLabel} sub={visits.length > 1 ? `${visits.length} workouts` : undefined}>
+  {#each visits as v (v.key)}
+    <div class="visit" data-testid="day-workout">
+      <h3>{v.name}</h3>
+      <dl class="figs">
+        <div><dt>Volume</dt><dd><span data-testid="day-volume">{num(v.volume)}</span><small>kg</small></dd></div>
+        <div><dt>Sets</dt><dd data-testid="day-sets">{v.sets}</dd></div>
+        {#if v.minutes !== null}<div><dt>Time</dt><dd><span data-testid="day-minutes">{v.minutes}</span><small>min</small></dd></div>{/if}
+      </dl>
+      <ul class="exs">
+        {#each v.exercises as ex (ex.exerciseId)}
+          <li>
+            <span class="en">{ex.name}</span>
+            <span class="ss">{#each ex.sets as st (st.id)}<span>{fmtKg(st.kg)} × {st.reps}</span>{/each}</span>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/each}
+</Sheet>
 
 <style>
   .lead { margin: 0 0 18px; font-size: 13px; }
@@ -145,8 +192,21 @@
   .cal-title { font: 600 12px/1 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 28px 0 10px; }
   .cal-days, .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .cal-days { font-size: 11px; text-align: center; margin-bottom: 6px; }
-  .day { aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--muted); font: 500 12px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .cell { display: grid; }
+  .day { aspect-ratio: 1; width: 100%; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--muted); font: 500 12px/1 var(--display); font-variant-numeric: tabular-nums; }
+  button.day { border: 0; padding: 0; min-width: 40px; min-height: 40px; cursor: pointer; }
   .day.on { background: var(--blue); color: var(--on-blue); font-weight: 700; }
   .day.today:not(.on) { outline: 1px solid var(--blue); outline-offset: -1px; color: var(--text); }
+  .visit + .visit { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .visit h3 { font: 700 16px/1.2 var(--body); margin: 0 0 10px; }
+  .figs { display: flex; gap: 10px; margin: 0 0 12px; }
+  .figs > div { flex: 1; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .figs dt { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .figs dd { margin: 4px 0 0; font: 700 20px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .figs small { font: 500 12px/1 var(--body); color: var(--muted); margin-left: 3px; }
+  .exs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .exs li { display: grid; gap: 4px; font-size: 14px; }
+  .en { font-weight: 600; }
+  .ss { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .day.future { opacity: 0.35; }
 </style>

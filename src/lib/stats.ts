@@ -1,5 +1,5 @@
 import { e1rm, isPR } from './progression';
-import { exerciseById } from './seed';
+import { exerciseById, TEMPLATES } from './seed';
 import type { Exercise, Muscle, SetLog, Settings, Workout } from './types';
 
 const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
@@ -176,4 +176,51 @@ export function workoutSummary(
   const kcal = Math.round((MET * bodyKg * (minutes / 60) * (legDay ? 1.1 : 1)) / 10) * 10;
 
   return { minutes, sets: mine.length, volume, prs, avgRestSec, workRatio, kcal };
+}
+
+export interface DayVisit {
+  key: string;
+  /** Session name (e.g. "Chest + Back B"); "Workout" when the record is missing. */
+  name: string;
+  /** Minutes from start to end; null while the workout is open or has no end. */
+  minutes: number | null;
+  sets: number;
+  volume: number;
+  exercises: { exerciseId: string; name: string; sets: { id: string; kg: number; reps: number }[] }[];
+}
+
+/**
+ * The gym visits of one date, each with its working sets grouped by exercise (in the order first done).
+ * Workouts of the same date and session are one visit. Warm-up and deleted sets are left out; a visit with no
+ * working sets is not listed. Sets whose workout record is missing form a visit named "Workout".
+ */
+export function dayVisits(date: string, workouts: Workout[], sets: SetLog[], lookup: ExerciseLookup = exerciseById): DayVisit[] {
+  const daySets = sets.filter((x) => x.date === date && working(x));
+  const dayWorkouts = workouts.filter((w) => w.date === date);
+  const out: { first: number; visit: DayVisit }[] = [];
+  const build = (key: string, name: string, minutes: number | null, mine: SetLog[]) => {
+    if (mine.length === 0) return;
+    mine.sort((a, b) => a.doneAt - b.doneAt || a.setNo - b.setNo);
+    const byEx = new Map<string, DayVisit['exercises'][number]>();
+    for (const x of mine) {
+      if (!byEx.has(x.exerciseId)) byEx.set(x.exerciseId, { exerciseId: x.exerciseId, name: lookup(x.exerciseId)?.name ?? x.exerciseId, sets: [] });
+      byEx.get(x.exerciseId)!.sets.push({ id: x.id, kg: x.kg, reps: x.reps });
+    }
+    const visit: DayVisit = { key, name, minutes, sets: mine.length, volume: mine.reduce((n, x) => n + x.kg * x.reps, 0), exercises: [...byEx.values()] };
+    out.push({ first: mine[0].doneAt, visit });
+  };
+  const seen = new Set<string>();
+  for (const w of dayWorkouts) {
+    const vk = visitKey(w);
+    if (seen.has(vk)) continue;
+    seen.add(vk);
+    const merged = mergeVisit(w, dayWorkouts, daySets);
+    const ids = new Set(dayWorkouts.filter((x) => visitKey(x) === vk).map((x) => x.id));
+    const mine = merged.sets.filter((x) => ids.has(x.workoutId) || x.workoutId === w.id);
+    const minutes = merged.workout.endedAt === undefined ? null : Math.round(Math.max(0, merged.workout.endedAt - merged.workout.startedAt) / 60_000);
+    build(vk, TEMPLATES.find((t) => t.id === w.sessionId)?.name ?? 'Workout', minutes, mine);
+  }
+  const known = new Set(dayWorkouts.map((w) => w.id));
+  build(`${date}|orphan`, 'Workout', null, daySets.filter((x) => !known.has(x.workoutId)));
+  return out.sort((a, b) => a.first - b.first).map((x) => x.visit);
 }
