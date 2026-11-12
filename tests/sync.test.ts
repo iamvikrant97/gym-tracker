@@ -181,7 +181,11 @@ describe('importFromSheet', () => {
   it('creates one CB-A workout, maps names to ids, adds unknowns as custom, and is not duplicated on a second run', async () => {
     const f = okFetch(data);
     expect(await importFromSheet(f)).toMatchObject({ imported: 3 });
-    expect(String(f.mock.calls[0][0])).toBe('https://script.example/exec?key=k3y');
+    expect(String(f.mock.calls[0][0])).toBe('https://script.example/exec'); // no key in the URL
+    const init = f.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('text/plain;charset=utf-8');
+    expect(bodyOf(f)).toEqual({ key: 'k3y', action: 'import' });
     const ws = await getAll<Workout>('workouts');
     expect(ws).toHaveLength(1);
     expect(ws[0]).toMatchObject({ date: '2026-11-09', sessionId: 'CB-A' });
@@ -216,6 +220,21 @@ describe('importFromSheet', () => {
     // second import is a no-op
     expect(await importFromSheet(okFetch(withIds))).toMatchObject({ imported: 0 });
     expect(await sets()).toHaveLength(2);
+  });
+
+  it('no error text ever contains the key', async () => {
+    const replies: Array<typeof fetch> = [
+      okFetch({ ok: false, error: 'bad key' }),
+      okFetch({ ok: false, error: 'busy' }),
+      okFetch({ ok: false, error: 'oops k3y leaked' }) as unknown as typeof fetch,
+      vi.fn(async (..._a: Parameters<typeof fetch>) => { throw new TypeError('offline https://script.example/exec k3y'); }),
+      vi.fn(async (..._a: Parameters<typeof fetch>) => ({ ok: false, status: 500, json: async () => ({}) }) as Response),
+    ];
+    for (const f of replies) {
+      const r = await importFromSheet(f);
+      expect(r.ok).toBe(false);
+      expect(JSON.stringify(r)).not.toContain('k3y');
+    }
   });
 
   it('does not import when the bridge fails', async () => {

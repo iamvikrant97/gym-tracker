@@ -2,7 +2,7 @@
 
 This takes about 20 minutes, once. You need a computer for steps 1 to 3 and your phone for steps 4 and 5.
 
-Nothing secret is stored in the code. Your Sheet link, your key and your Spotify Client ID are only typed into the app on your phone.
+Nothing secret is stored in the code. Your Sheet link, your key and your Spotify Client ID are only typed into the app on your phone. The key is sent to your script only inside the request body (never in the web address), and the script checks it in constant time.
 
 ---
 
@@ -60,6 +60,8 @@ Keep using the original. The copy is only there if something goes wrong.
 
 If you change `Code.gs` later, use **Deploy → Manage deployments → edit (pencil) → Version: New version → Deploy**, so the URL stays the same.
 
+**Updating from an older version of the script:** the app now sends your key in the body of a POST request and never in the web address (addresses are kept in logs and browser history). Paste the new `Code.gs`, save, and deploy a **New version** as above, otherwise "Test connection" and "Save and import" will not work. Opening the web app URL in a browser now only shows `use POST`; that is expected.
+
 ---
 
 ## 3. Connect Spotify (optional)
@@ -115,7 +117,7 @@ Done. Log a set, and within a few seconds it appears in the Sheet. The dot on th
 |---|---|
 | "The key does not match the one in the script" | The key in the app and the `KEY` script property are different. Retype both. No spaces. |
 | "This is the test URL…" or "should end in /exec" | You copied the wrong URL. Use **Deploy → Manage deployments** and copy the Web app URL ending in `/exec`. |
-| "That URL did not answer like the script" | "Who has access" is not **Anyone**. Fix it in **Deploy → Manage deployments → edit**, choose **New version**, Deploy. |
+| "That URL did not answer like the script" | Either "Who has access" is not **Anyone** (fix it in **Deploy → Manage deployments → edit**, choose **New version**, Deploy), or the script is an old copy: paste the latest `Code.gs` and deploy a **New version**. |
 | "Could not reach the script" | No internet. Your sets are safe on the phone and are sent later by themselves. |
 | "The Sheet is taking long…" (first import) | The script is still working. Wait a minute and tap **Try again**. Nothing is duplicated. |
 | The workout says it closed after an hour without a set | Tap **Continue workout** (or just log the next set): the same workout carries on, for up to 3 hours, the same day. |

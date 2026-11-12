@@ -242,9 +242,13 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/** Constant-time compare: XOR-accumulates over every character, so the time does not reveal how much matched. */
 function keyOk_(key) {
   const real = PropertiesService.getScriptProperties().getProperty('KEY');
-  return !!real && key === real;
+  if (!real || typeof key !== 'string' || key.length !== real.length) return false;
+  let diff = 0;
+  for (let i = 0; i < real.length; i++) diff |= key.charCodeAt(i) ^ real.charCodeAt(i);
+  return diff === 0;
 }
 
 function tz_() { return SpreadsheetApp.getActive().getSpreadsheetTimeZone(); }
@@ -260,8 +264,13 @@ function readBlock_(sheet, width, minRows) {
   return vals;
 }
 
-function doGet(e) {
-  if (!keyOk_(e && e.parameter && e.parameter.key)) return json_({ ok: false, error: 'bad key' });
+/** GET never carries the key (URLs end up in logs and history): everything goes through POST. */
+function doGet() {
+  return json_({ ok: false, error: 'use POST' });
+}
+
+/** The import: reads the whole Log (and fills in ids / inherited cells on hand-typed rows). Key already checked. */
+function importLog_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(25000)) return json_({ ok: false, error: 'busy' });
   try {
@@ -303,6 +312,7 @@ function doPost(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'bad json' }); }
   if (!keyOk_(body && body.key)) return json_({ ok: false, error: 'bad key' });
+  if (body.action === 'import') return importLog_();
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(25000)) return json_({ ok: false, error: 'busy' });
   try {

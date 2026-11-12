@@ -104,7 +104,8 @@ describe('Settings screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save and import' }));
     expect(await screen.findByText('Imported 2 sets')).toBeTruthy();
     expect(await loadSettings()).toMatchObject({ scriptUrl: 'https://script.google.com/macros/s/AB/exec', scriptKey: 'k3y' });
-    expect(String(f.mock.calls[0][0])).toContain('key=k3y');
+    expect(String(f.mock.calls[0][0])).toBe('https://script.google.com/macros/s/AB/exec'); // key never in the URL
+    expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({ key: 'k3y', action: 'import' });
     expect(await getAll<SetLog>('sets')).toHaveLength(2);
   });
 

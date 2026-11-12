@@ -183,16 +183,26 @@ export function checkScriptUrl(url: string | undefined): string | null {
 type SheetData = { ok?: boolean; error?: string; log?: LogRow[]; exercises?: LibRow[] };
 type SheetGet = { ok: true; data: SheetData } | { ok: false; error: string };
 
-/** GET url?key=: reads the whole Log. The error text never contains the key. */
+/**
+ * POST {key, action:'import'} (text/plain, like flush): reads the whole Log. The key travels only in the body, never
+ * in the URL (URLs end up in logs and history). Error text never contains the key.
+ */
 async function getSheet(fetchFn: typeof fetch, url: string, key: string): Promise<SheetGet> {
   const u = url.trim();
-  const sep = u.includes('?') ? '&' : '?';
+  const k = key.trim();
+  const scrub = (msg: string) => (k ? msg.split(k).join('•••') : msg);
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
   let timedOut = false;
   const timer = ctrl ? setTimeout(() => ((timedOut = true), ctrl.abort()), tuning.importMs) : undefined;
   let res: Response;
   try {
-    res = await fetchFn(`${u}${sep}key=${encodeURIComponent(key.trim())}`, { redirect: 'follow', signal: ctrl?.signal });
+    res = await fetchFn(u, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: k, action: 'import' }),
+      redirect: 'follow',
+      signal: ctrl?.signal,
+    });
   } catch {
     // The script keeps working after we stop waiting, and import is merged by id: trying again is safe.
     if (timedOut) return { ok: false, error: 'The Sheet is taking long (the first import does the most work). Wait a minute, then tap Try again. Nothing is duplicated' };
@@ -210,7 +220,7 @@ async function getSheet(fetchFn: typeof fetch, url: string, key: string): Promis
   if (data?.ok === false) {
     if (data.error === 'bad key') return { ok: false, error: 'The key does not match the one in the script' };
     if (data.error === 'busy') return { ok: false, error: 'The Sheet is busy. Try again in a minute' };
-    return { ok: false, error: `The script reported a problem: ${String(data.error ?? 'unknown')}` };
+    return { ok: false, error: scrub(`The script reported a problem: ${String(data.error ?? 'unknown')}`) };
   }
   if (!Array.isArray(data?.log)) return { ok: false, error: 'That URL did not answer like the script' };
   return { ok: true, data };
