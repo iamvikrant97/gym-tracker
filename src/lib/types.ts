@@ -107,4 +107,13 @@ export interface Settings {
   retiredSessions?: Record<SessionId, string>;
   /** Greeting name. Written as 'Vik' when an existing install is migrated; new installs leave it unset (plain greeting). Backups carry it. */
   userName?: string;
+  /** Optional names for the greeting by time of day; a missing slot uses userName. */
+  greetNames?: GreetNames;
+}
+
+export interface GreetNames {
+  morning?: string;
+  afternoon?: string;
+  evening?: string;
+  night?: string;
 }

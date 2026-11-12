@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getAll, loadSettings, DEFAULT_SETTINGS } from '../lib/db';
+  import { greetingFor } from '../lib/greeting';
   import { currentPlan, exerciseById, templateFor } from '../lib/seed';
   import { homeNotes, visitKey, visitKeysInWeek } from '../lib/stats';
   import { showToast } from '../ui/toast.svelte';
@@ -40,7 +41,6 @@
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const d = $derived(new Date(now));
   const dateLabel = $derived(`${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`);
-  const greeting = $derived(d.getHours() < 12 ? 'Morning' : d.getHours() < 17 ? 'Afternoon' : 'Evening');
   let starting = $state(false);
 
   let loadSeq = 0;
@@ -111,6 +111,7 @@
   // A stored name wins. With no name: no plan yet (the original install, before migration) is Vik's; a plan means a new install,
   // which gets the plain greeting and the training-days note.
   const who = $derived(settings.userName ?? (settings.plan ? '' : 'Vik'));
+  const greeting = $derived(greetingFor(d.getHours(), who, settings.greetNames).text);
   const isVik = $derived(!settings.plan || settings.userName === 'Vik');
   const notes = $derived([
     ...homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)),
@@ -167,7 +168,7 @@
     </button>
   </div>
 
-  <h1 class="greet">{who ? `${greeting}, ${who}` : greeting}</h1>
+  <h1 class="greet">{greeting}</h1>
 
   <article class="today">
     <div class="lbl">Today · session {sessionNo} of {settings.weeklyTarget}</div>

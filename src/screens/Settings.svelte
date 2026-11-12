@@ -14,6 +14,7 @@
   import { spotify } from '../lib/spotify/player.svelte';
   import { workout, localDate, MAX_REST_SEC } from '../lib/workout.svelte';
   import { daysLabel } from '../lib/planSetup';
+  import { GREET_MAX, GREET_SLOTS, cleanGreetName, greetingFor, sanitizeGreetNames } from '../lib/greeting';
   import { currentPlan } from '../lib/seed';
   import { fmtClock, fmtKg } from '../lib/workoutView';
   import Sheet from '../ui/Sheet.svelte';
@@ -193,6 +194,28 @@
     }
     await save({ bodyKg: Math.round(v * 10) / 10 });
   }
+  // ---- Greeting ----
+  const SLOT_HOURS = { morning: 'before noon', afternoon: '12 to 5 pm', evening: '5 to 9 pm', night: 'after 9 pm' } as const;
+  let nowHour = $state(new Date().getHours());
+  async function saveUserName(e: Event) {
+    const v = cleanGreetName((e.currentTarget as HTMLInputElement).value);
+    (e.currentTarget as HTMLInputElement).value = v;
+    await save((c) => {
+      const { userName: _u, ...rest } = c;
+      return v ? { ...rest, userName: v } : rest;
+    });
+  }
+  async function saveGreetName(slot: (typeof GREET_SLOTS)[number], e: Event) {
+    const v = cleanGreetName((e.currentTarget as HTMLInputElement).value);
+    (e.currentTarget as HTMLInputElement).value = v;
+    await save((c) => {
+      const next = sanitizeGreetNames({ ...c.greetNames, [slot]: v });
+      const { greetNames: _g, ...rest } = c;
+      return next ? { ...rest, greetNames: next } : rest;
+    });
+  }
+  const preview = $derived(greetingFor(nowHour, settings.userName, settings.greetNames).text);
+
   async function repeatLast() {
     try {
       await workout.repeatLast();
@@ -377,6 +400,23 @@
     {#if workout.active}<p class="hint">A workout is open. Finish it before repeating the last one.</p>{/if}
   </article>
 
+  <!-- Greeting -->
+  <article class="card" aria-label="Greeting">
+    <h2>Greeting</h2>
+    <div class="line">
+      <label for="user-name">Your name</label>
+      <input id="user-name" class="txt" type="text" autocomplete="off" maxlength={GREET_MAX} placeholder="Optional" value={settings.userName ?? ''} onchange={saveUserName} />
+    </div>
+    <p class="hint">Want something different at certain times? Leave a box empty to use your name.</p>
+    {#each GREET_SLOTS as slot (slot)}
+      <div class="line">
+        <label for="greet-{slot}">{slot[0].toUpperCase() + slot.slice(1)} name</label>
+        <input id="greet-{slot}" class="txt" type="text" autocomplete="off" maxlength={GREET_MAX} placeholder="{slot[0].toUpperCase() + slot.slice(1)} · {SLOT_HOURS[slot]}" value={settings.greetNames?.[slot] ?? ''} onchange={(e) => saveGreetName(slot, e)} />
+      </div>
+    {/each}
+    <p class="status" data-testid="greet-preview">{preview}</p>
+  </article>
+
   <!-- Training plan -->
   <article class="card" aria-label="Training plan">
     <h2>Training plan</h2>
@@ -502,6 +542,7 @@
   .line { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; }
   .line > :first-child { flex: 1; }
   .line small { display: block; font-size: 12px; color: var(--muted); }
+  .line input.txt { width: 150px; flex: none; }
   .line input.num { width: 96px; flex: none; text-align: center; }
   .stepper { display: flex; align-items: center; gap: 4px; }
   .stepper button { width: 48px; height: 48px; border-radius: 12px; background: var(--raised); font-size: 20px; }

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { listExercises } from '../lib/db';
   import { EXERCISES } from '../lib/seed';
+  import { GREET_MAX, cleanGreetName } from '../lib/greeting';
   import { DAY_LONG, DAY_SHORT, WEEK_ORDER, daysLabel, defaultDays, sortDays } from '../lib/planSetup';
   import { currentPlan, fullBodyPlan, resolvePlan, VIK_PLAN } from '../lib/seed';
   import { weekSchedule } from '../lib/selection';
@@ -43,6 +44,7 @@
   let creating = $state(false);
   let saving = $state(false);
   let error = $state('');
+  let callMe = $state('');
 
   const path = $derived<Step[]>(choice === 'custom' ? ['days', 'plan', 'build', 'review'] : ['days', 'plan', 'review']);
   const at = $derived(Math.max(0, path.indexOf(step)));
@@ -152,8 +154,10 @@
       await workout.updateSettings((cur) => {
         const retired = { ...(cur.retiredSessions ?? {}) };
         if (cur.plan) for (const t of resolvePlan(cur.plan).sessions) retired[t.id] = t.name;
+        const userName = firstRun ? cleanGreetName(callMe) : '';
         return {
           ...cur,
+          ...(userName ? { userName } : {}), // never saves an empty name
           plan,
           weeklyTarget: plan.weeklyTarget,
           retiredSessions: retired,
@@ -200,6 +204,11 @@
         {/each}
       </div>
       <p class="hint" class:warn={days.length !== count} aria-live="polite">{daysHint}</p>
+      {#if firstRun}
+        <label class="field">What should I call you? (optional)
+          <input type="text" autocomplete="off" maxlength={GREET_MAX} placeholder="Your name" bind:value={callMe} />
+        </label>
+      {/if}
     {:else if step === 'plan'}
       <div class="plans" role="radiogroup" aria-label="Plan">
         <button type="button" role="radio" class="plan press" class:suggested={count <= 3} aria-checked={choice === 'fullbody'} onclick={() => (choice = 'fullbody')}>

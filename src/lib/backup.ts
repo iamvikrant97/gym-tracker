@@ -3,6 +3,7 @@
 import { getAll, loadSettings, openDb, updateSettings } from './db';
 import type { QueueItem } from './db';
 import { contentKey } from './dedupe';
+import { sanitizeGreetNames } from './greeting';
 import { scheduleFlush } from './sync';
 import type { Exercise, SetLog, Settings, Workout } from './types';
 
@@ -132,6 +133,8 @@ export async function restoreBackup(input: string | unknown): Promise<RestoreRes
       scriptUrl: cur.scriptUrl || file.scriptUrl,
       scriptKey: cur.scriptKey,
       spotifyClientId: cur.spotifyClientId || file.spotifyClientId,
+      // A file is not trusted: only plain, trimmed names in the four known slots.
+      greetNames: 'greetNames' in file ? sanitizeGreetNames(file.greetNames) : cur.greetNames,
     }));
   }
   if (queued) scheduleFlush();
