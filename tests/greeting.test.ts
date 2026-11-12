@@ -17,14 +17,20 @@ const at = (h: number, m = 0) => new Date(2026, 10, 12, h, m);
 describe('greetingFor: word by hour', () => {
   it.each([
     [0, 'Morning'], [5, 'Morning'], [6, 'Morning'], [11, 'Morning'], [12, 'Afternoon'], [16, 'Afternoon'],
-    [17, 'Evening'], [20, 'Evening'], [21, 'Night'], [23, 'Night'],
-  ])('hour %i is %s', (h, word) => {
-    expect(greetingFor(h, undefined, undefined).word).toBe(word);
+    [17, 'Evening'], [20, 'Evening'], [21, 'Evening'], [23, 'Evening'],
+  ])('classic greeting (no custom names) hour %i is %s, exactly as before', (h, word) => {
+    expect(greetingFor(h, 'Vik', undefined).word).toBe(word);
   });
-  it('boundaries at 11:59, 12:00, 16:59, 17:00, 20:59, 21:00', () => {
-    const w = (d: Date) => greetingFor(d.getHours(), undefined, undefined).word;
-    expect([at(11, 59), at(12, 0), at(16, 59), at(17, 0), at(20, 59), at(21, 0)].map(w)).toEqual([
-      'Morning', 'Afternoon', 'Afternoon', 'Evening', 'Evening', 'Night',
+  it.each([
+    [0, 'Night'], [4, 'Night'], [5, 'Morning'], [11, 'Morning'], [12, 'Afternoon'], [16, 'Afternoon'],
+    [17, 'Evening'], [20, 'Evening'], [21, 'Night'], [23, 'Night'],
+  ])('with custom names hour %i is %s', (h, word) => {
+    expect(greetingFor(h, 'Minal', { morning: 'cutie' }).word).toBe(word);
+  });
+  it('boundaries with custom names at 4:59, 5:00, 11:59, 12:00, 16:59, 17:00, 20:59, 21:00', () => {
+    const w = (d: Date) => greetingFor(d.getHours(), 'Minal', { night: 'x' }).word;
+    expect([at(4, 59), at(5, 0), at(11, 59), at(12, 0), at(16, 59), at(17, 0), at(20, 59), at(21, 0)].map(w)).toEqual([
+      'Night', 'Morning', 'Morning', 'Afternoon', 'Afternoon', 'Evening', 'Evening', 'Night',
     ]);
   });
 });
