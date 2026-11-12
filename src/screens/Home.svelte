@@ -6,7 +6,7 @@
   import { showToast } from '../ui/toast.svelte';
   import { onMount } from 'svelte';
   import { nextInPlan } from '../lib/selection';
-  import { trainingDayNote } from '../lib/planSetup';
+  import { planHintDue, trainingDayNote } from '../lib/planSetup';
   import { workout, localDate } from '../lib/workout.svelte';
   import { estimateMinutes } from '../lib/workoutView';
   import type { SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
@@ -118,6 +118,18 @@
     ...(isVik ? [] : [trainingDayNote(planNow, new Date(now))].filter(Boolean)),
   ]);
 
+  // A gentle, one-time nudge after 8 weeks of data on a plan (not for Vik's own install). Dismissing it is saved.
+  let hintGone = $state(false);
+  const showHint = $derived(!isVik && !hintGone && !settings.planHintDismissed && planHintDue(planNow, workouts, sets));
+  async function dismissHint() {
+    hintGone = true;
+    try {
+      await workout.updateSettings({ planHintDismissed: true });
+    } catch {
+      showToast('Could not save that');
+    }
+  }
+
   /** Splits a note into plain and emphasised parts (counts and ages read as the figures). */
   function parts(line: string): { text: string; strong: boolean }[] {
     return line
@@ -194,6 +206,13 @@
       </p>
     {/each}
   </div>
+
+  {#if showHint}
+    <aside class="plan-hint" aria-label="Plan hint">
+      <p>Ready to change things up? Settings → Training plan</p>
+      <button class="x press" type="button" aria-label="Dismiss hint" onclick={dismissHint}>✕</button>
+    </aside>
+  {/if}
 </section>
 
 <Sheet open={swapOpen} onclose={() => (swapOpen = false)} title="Swap day" sub={swapSub}>
@@ -236,6 +255,10 @@
   .notes p::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #3a404c; transform: translateY(-1px); }
   .notes p.warn::before { background: var(--amber); }
   .notes strong { color: var(--text); font-weight: 500; }
+
+  .plan-hint { margin-top: 18px; display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 16px; border-radius: 14px; background: var(--raised); }
+  .plan-hint p { margin: 0; flex: 1; font-size: 13.5px; color: var(--muted); }
+  .plan-hint .x { width: 48px; height: 48px; flex: none; border-radius: 12px; color: var(--muted); font-size: 15px; }
 
   .opt { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 12px; min-height: 56px; border-radius: 12px; text-align: left; }
   .nm { display: block; font-weight: 600; }

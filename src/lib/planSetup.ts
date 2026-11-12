@@ -3,7 +3,7 @@
 import { setActivePlan, setRetiredNames } from './activePlan.svelte';
 import { getAll, loadSettings, updateSettings } from './db';
 import { resolvePlan, VIK_PLAN } from './seed';
-import type { Plan, Settings } from './types';
+import type { Plan, SetLog, Settings, Workout } from './types';
 
 export type PlanGate = 'ready' | 'setup';
 
@@ -71,4 +71,43 @@ export function trainingDayNote(plan: Plan, at: Date): string {
     if (plan.days.includes(d)) return `Rest day · next training day is ${DAY_LONG[d]}`;
   }
   return '';
+}
+
+export type PlanChoice = 'fullbody' | 'upperlower' | 'ppl' | 'vik' | 'custom';
+
+/** The cards of the "choose a plan" step, in the order shown: what it is, who it suits, and what is in it. */
+export const PLAN_CARDS: { id: PlanChoice; name: string; fit: string; desc: string }[] = [
+  { id: 'fullbody', name: 'Full body A/B', fit: 'Best for starting or 2–3 days', desc: 'Two workouts that take turns. 5 or 6 exercises each, machines and simple lifts first.' },
+  { id: 'upperlower', name: 'Upper/Lower', fit: '4 days, more volume per muscle', desc: 'Upper A, Lower A, Upper B, Lower B. Each muscle is trained twice a week.' },
+  { id: 'ppl', name: 'Push/Pull/Legs', fit: '3–6 days, for people comfortable training often', desc: 'Push, Pull, Legs, then the B versions. Six sessions that repeat.' },
+  { id: 'vik', name: "Vik's split", fit: '4–6 days, longer sessions', desc: 'Chest + back, legs, shoulders + arms, each in an A and a B version.' },
+  { id: 'custom', name: 'Build my own', fit: 'Any number of days', desc: 'Name your sessions and pick the exercises yourself.' },
+];
+
+/** The plan highlighted as "Suggested for you" for a number of training days: 2-3 Full body, 4 Upper/Lower, 5-7 Push/Pull/Legs. */
+export function suggestedPlanFor(daysPerWeek: number): 'fullbody' | 'upperlower' | 'ppl' {
+  return daysPerWeek <= 3 ? 'fullbody' : daysPerWeek === 4 ? 'upperlower' : 'ppl';
+}
+
+/** Monday of the week a 'YYYY-MM-DD' date falls in, as a date string. */
+function weekStart(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const at = new Date(y, m - 1, d);
+  at.setDate(at.getDate() - ((at.getDay() + 6) % 7));
+  return `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
+}
+
+/** Weeks of logged data on a plan after which Home suggests a change. */
+export const PLAN_HINT_WEEKS = 8;
+
+/**
+ * True once the plan's own sessions have working sets in at least 8 different weeks (Monday to Sunday). Workouts with
+ * no sets, warm-ups only, deleted sets and sessions of other plans do not count. `sets` may include deleted ones.
+ */
+export function planHintDue(plan: Plan, workouts: Workout[], sets: SetLog[]): boolean {
+  const ids = new Set(plan.sessions.map((t) => t.id));
+  const trained = new Set(sets.filter((x) => !x.deleted && !x.warmup).map((x) => x.workoutId));
+  const weeks = new Set<string>();
+  for (const w of workouts) if (ids.has(w.sessionId) && trained.has(w.id)) weeks.add(weekStart(w.date));
+  return weeks.size >= PLAN_HINT_WEEKS;
 }

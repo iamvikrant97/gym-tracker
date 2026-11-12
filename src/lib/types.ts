@@ -1,6 +1,6 @@
 export type Muscle = 'Chest' | 'Back' | 'Shoulders' | 'Biceps' | 'Triceps' | 'Quads' | 'Hamstrings' | 'Calves' | 'Abs' | 'Other';
 export type Group = 'CB' | 'L' | 'SA';
-/** Vik's ids are 'CB-A' ... 'SA-B'; plans made in the setup flow use their own ids ('fb-a', 'c1-ab12', ...). */
+/** Vik's ids are 'CB-A' ... 'SA-B'; plans made in the setup flow use their own ids ('fb-a', 'ul-upper-a', 'ppl-push-a', 'c1-ab12', ...). */
 export type SessionId = string;
 
 export interface Exercise {
@@ -42,7 +42,7 @@ export interface SessionTemplate {
  * Stored in the settings row. The built-in plan 'vik' is stored without sessions (they come from the code).
  */
 export interface Plan {
-  /** 'vik', 'fullbody' or 'custom'. */
+  /** 'vik', 'fullbody', 'upperlower', 'ppl' or 'custom'. */
   id: string;
   name: string;
   sessions: SessionTemplate[];
@@ -109,6 +109,8 @@ export interface Settings {
   userName?: string;
   /** Optional names for the greeting by time of day; a missing slot uses userName. */
   greetNames?: GreetNames;
+  /** The "Ready to change things up?" hint on Home was dismissed (shown once). */
+  planHintDismissed?: boolean;
 }
 
 export interface GreetNames {

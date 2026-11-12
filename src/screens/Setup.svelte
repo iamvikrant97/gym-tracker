@@ -3,8 +3,8 @@
   import { listExercises } from '../lib/db';
   import { EXERCISES } from '../lib/seed';
   import { GREET_MAX, cleanGreetName } from '../lib/greeting';
-  import { DAY_LONG, DAY_SHORT, WEEK_ORDER, daysLabel, defaultDays, sortDays } from '../lib/planSetup';
-  import { currentPlan, fullBodyPlan, resolvePlan, VIK_PLAN } from '../lib/seed';
+  import { DAY_LONG, DAY_SHORT, PLAN_CARDS, WEEK_ORDER, daysLabel, defaultDays, sortDays, suggestedPlanFor, type PlanChoice } from '../lib/planSetup';
+  import { currentPlan, planFromTemplate, resolvePlan, VIK_PLAN, type TemplatePlanId } from '../lib/seed';
   import { weekSchedule } from '../lib/selection';
   import { workout } from '../lib/workout.svelte';
   import { fmtKg } from '../lib/workoutView';
@@ -19,7 +19,7 @@
   let { firstRun = true, onfinish, oncancel, onrestore }: { firstRun?: boolean; onfinish: () => void; oncancel?: () => void; onrestore?: () => void } = $props();
 
   type Step = 'days' | 'plan' | 'build' | 'review';
-  type Choice = 'fullbody' | 'vik' | 'custom';
+  type Choice = PlanChoice;
   interface Draft { key: string; id: string; name: string; ids: string[] }
 
   const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
@@ -46,6 +46,8 @@
   let error = $state('');
   let callMe = $state('');
 
+  // The number of days from step 1 steers which card is highlighted; any plan can still be picked.
+  const suggestedId = $derived(suggestedPlanFor(count));
   const path = $derived<Step[]>(choice === 'custom' ? ['days', 'plan', 'build', 'review'] : ['days', 'plan', 'review']);
   const at = $derived(Math.max(0, path.indexOf(step)));
 
@@ -127,7 +129,7 @@
       };
     }
     if (choice === 'vik') return { id: 'vik', name: VIK_PLAN.name, sessions: [], days: sorted, weeklyTarget: target };
-    return { ...fullBodyPlan(sorted), weeklyTarget: target };
+    return { ...planFromTemplate(choice as TemplatePlanId, sorted), weeklyTarget: target };
   });
   const schedule = $derived(built.sessions.length || built.id === 'vik' ? weekSchedule(resolvePlan(built)) : []);
   const takesTurns = $derived((resolvePlan(built).sessions.length > 1) && days.length % resolvePlan(built).sessions.length !== 0);
@@ -211,19 +213,15 @@
       {/if}
     {:else if step === 'plan'}
       <div class="plans" role="radiogroup" aria-label="Plan">
-        <button type="button" role="radio" class="plan press" class:suggested={count <= 3} aria-checked={choice === 'fullbody'} onclick={() => (choice = 'fullbody')}>
-          {#if count <= 3}<span class="eyebrow">Suggested for you</span>{/if}
-          <span class="nm">Full body A/B</span>
-          <span class="desc">Two workouts that take turns. 5 or 6 exercises each, 2 to 3 sets, machines and simple lifts first.</span>
-        </button>
-        <button type="button" role="radio" class="plan press" aria-checked={choice === 'vik'} onclick={() => (choice = 'vik')}>
-          <span class="nm">Vik's split</span>
-          <span class="desc">Chest + back, legs, shoulders + arms, each in an A and a B version. Six sessions, best for 4 or more days.</span>
-        </button>
-        <button type="button" role="radio" class="plan press" aria-checked={choice === 'custom'} onclick={() => (choice = 'custom')}>
-          <span class="nm">Build my own</span>
-          <span class="desc">Name your sessions and pick the exercises yourself.</span>
-        </button>
+        {#each PLAN_CARDS as c (c.id)}
+          {@const hot = c.id === suggestedId}
+          <button type="button" role="radio" class="plan press" class:suggested={hot} aria-checked={choice === c.id} onclick={() => (choice = c.id)}>
+            {#if hot}<span class="eyebrow">Suggested for you</span>{/if}
+            <span class="nm">{c.name}</span>
+            <span class="fit">{c.fit}</span>
+            <span class="desc">{c.desc}</span>
+          </button>
+        {/each}
       </div>
     {:else if step === 'build'}
       <p class="lead">Name each session and add the exercises you want. Each starts with 3 sets.</p>
@@ -325,6 +323,7 @@
   .plan[aria-checked='true'] { box-shadow: 0 0 0 2px var(--blue); }
   .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--blue); }
   .nm { font-weight: 600; font-size: 17px; }
+  .fit { font-size: 13.5px; font-weight: 500; }
   .desc { font-size: 13.5px; color: var(--muted); }
   .draft { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: grid; gap: 10px; }
   .field { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }

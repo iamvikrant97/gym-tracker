@@ -187,8 +187,64 @@ export const FULLBODY_SESSIONS: SessionTemplate[] = [
 ];
 
 export function fullBodyPlan(days: number[]): Plan {
-  const sessions = FULLBODY_SESSIONS.map((t) => ({ ...t, items: t.items.map((i) => ({ ...i })) }));
-  return { id: 'fullbody', name: 'Full body A/B', sessions, days: [...days], weeklyTarget: days.length };
+  return templatePlan('fullbody', 'Full body A/B', FULLBODY_SESSIONS, days);
+}
+
+/** Upper/Lower for 3-4 days: Upper A, Lower A, Upper B, Lower B, in turns (3 days rotates, so A and B swap next week). */
+export const UPPERLOWER_SESSIONS: SessionTemplate[] = [
+  fb('ul-upper-a', 'Upper A', 'A', [
+    ['machine-chest-press', 3], ['lat-pulldown-wide', 3], ['machine-shoulder-press', 2], ['seated-machine-row', 2], ['bar-pushdown', 2], ['db-curl', 2],
+  ]),
+  fb('ul-lower-a', 'Lower A', 'A', [
+    ['leg-press', 3], ['db-romanian-deadlift', 3], ['seated-leg-curl', 3], ['calf-raise-machine', 3], ['cable-crunch', 2],
+  ]),
+  fb('ul-upper-b', 'Upper B', 'B', [
+    ['db-incline-press', 3], ['cable-row-v-handle', 3], ['neutral-grip-pulldown', 2], ['db-lateral-raise', 3], ['rope-pushdown', 2], ['cable-curl', 2],
+  ]),
+  fb('ul-lower-b', 'Lower B', 'B', [
+    ['goblet-squat', 3], ['hip-thrust', 3], ['lying-leg-curl', 3], ['leg-press-calf-raise', 3], ['dead-bug', 2],
+  ]),
+];
+
+/** Push/Pull/Legs for 3-6 days: a six-session cycle, Push A, Pull A, Legs A, Push B, Pull B, Legs B. */
+export const PPL_SESSIONS: SessionTemplate[] = [
+  fb('ppl-push-a', 'Push A', 'A', [
+    ['machine-chest-press', 3], ['machine-shoulder-press', 3], ['incline-machine-press', 2], ['db-lateral-raise', 3], ['pec-fly-machine', 2], ['bar-pushdown', 3],
+  ]),
+  fb('ppl-pull-a', 'Pull A', 'A', [
+    ['lat-pulldown-wide', 3], ['seated-machine-row', 3], ['straight-arm-cable-pulldown', 2], ['face-pull', 3], ['db-curl', 3], ['hammer-curl', 2],
+  ]),
+  fb('ppl-legs-a', 'Legs A', 'A', [
+    ['leg-press', 3], ['db-romanian-deadlift', 3], ['seated-leg-curl', 3], ['split-squat', 2], ['calf-raise-machine', 3], ['cable-crunch', 2],
+  ]),
+  fb('ppl-push-b', 'Push B', 'B', [
+    ['db-flat-press', 3], ['db-shoulder-press', 3], ['cable-fly', 2], ['cable-lateral-raise', 3], ['rope-pushdown', 3], ['overhead-cable-extension', 2],
+  ]),
+  fb('ppl-pull-b', 'Pull B', 'B', [
+    ['neutral-grip-pulldown', 3], ['cable-row-v-handle', 3], ['db-row', 2], ['rope-face-pull', 3], ['cable-curl', 3], ['incline-db-curl', 2],
+  ]),
+  fb('ppl-legs-b', 'Legs B', 'B', [
+    ['goblet-squat', 3], ['hip-thrust', 3], ['lying-leg-curl', 3], ['leg-press-feet-high', 2], ['leg-press-calf-raise', 3], ['dead-bug', 2],
+  ]),
+];
+
+/** The ready-made plans of the setup flow. */
+export type TemplatePlanId = 'fullbody' | 'upperlower' | 'ppl';
+
+const TEMPLATE_PLANS: Record<TemplatePlanId, { name: string; sessions: SessionTemplate[] }> = {
+  fullbody: { name: 'Full body A/B', sessions: FULLBODY_SESSIONS },
+  upperlower: { name: 'Upper/Lower', sessions: UPPERLOWER_SESSIONS },
+  ppl: { name: 'Push/Pull/Legs', sessions: PPL_SESSIONS },
+};
+
+/** A stored copy of a template's sessions on the given weekdays; the weekly target is the number of days. */
+function templatePlan(id: TemplatePlanId, name: string, sessions: SessionTemplate[], days: number[]): Plan {
+  return { id, name, sessions: sessions.map((t) => ({ ...t, items: t.items.map((i) => ({ ...i })) })), days: [...days], weeklyTarget: days.length };
+}
+
+export function planFromTemplate(id: TemplatePlanId, days: number[]): Plan {
+  const t = TEMPLATE_PLANS[id];
+  return templatePlan(id, t.name, t.sessions, days);
 }
 
 /** Plan in effect: the one loaded from settings, else Vik's. */
@@ -209,6 +265,8 @@ export function sessionName(sessionId: SessionId): string | undefined {
     templateFor(sessionId)?.name ??
     TEMPLATES.find((t) => t.id === sessionId)?.name ??
     FULLBODY_SESSIONS.find((t) => t.id === sessionId)?.name ??
+    UPPERLOWER_SESSIONS.find((t) => t.id === sessionId)?.name ??
+    PPL_SESSIONS.find((t) => t.id === sessionId)?.name ??
     getRetiredNames()[sessionId]
   );
 }
