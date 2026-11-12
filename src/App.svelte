@@ -9,6 +9,8 @@
   import Workout from './screens/Workout.svelte';
   import Summary from './screens/Summary.svelte';
   import Settings from './screens/Settings.svelte';
+  import Setup from './screens/Setup.svelte';
+  import { initPlan, type PlanGate } from './lib/planSetup';
   import { lastSyncAt, onImported, onSyncChange, startAutoSync, syncLabel, syncStatus } from './lib/sync';
   import RestDock from './ui/RestDock.svelte';
   import { watchWorkout } from './lib/session.svelte';
@@ -29,6 +31,16 @@
 
   let route = $state(parseRoute(location.hash));
 
+  // 'loading' until the stored plan is known. An empty install with no plan runs the setup flow instead of Home;
+  // an install that already has sets or workouts is Vik's and gets plan 'vik' silently (see initPlan).
+  let gate = $state<'loading' | PlanGate>('loading');
+  const setupOpen = $derived(gate === 'setup' || (gate === 'ready' && route === 'setup'));
+  function finishSetup() {
+    gate = 'ready';
+    location.hash = '#/';
+    route = 'home';
+  }
+
   /**
    * Route registry: route name (the first hash segment) -> screen component.
    * Later tasks add their screen here: import it and add `workout: Workout`, etc.
@@ -37,9 +49,16 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout, summary: Summary, settings: Settings };
   const Screen = $derived(screens[route]);
-  const showNav = $derived(['home', 'workout', 'progress', 'week'].includes(route));
+  const showNav = $derived(gate === 'ready' && ['home', 'workout', 'progress', 'week'].includes(route));
 
   onMount(() => {
+    // Home opens only once the store has the settings too, so a new install never flashes the original greeting.
+    initPlan()
+      .then(async (g) => {
+        if (g === 'ready') await workout.refreshShared().catch(() => undefined);
+        gate = g;
+      })
+      .catch(() => (gate = 'ready'));
     workout.restore().catch(() => undefined);
     // Sync: queue flushes on start, after each set (2 s debounce), when back online / visible / leaving.
     startAutoSync();
@@ -62,7 +81,11 @@
 <svelte:window onhashchange={() => (route = parseRoute(location.hash))} />
 
 <main data-route={route}>
-  {#if Screen}
+  {#if gate === 'loading'}
+    <!-- the stored plan is being read -->
+  {:else if setupOpen}
+    <Setup firstRun={gate === 'setup'} onfinish={finishSetup} oncancel={() => (location.hash = '#/settings')} />
+  {:else if Screen}
     <Screen syncStatus={sync.text} syncWarn={sync.warn} />
   {:else}
     <section class="screen">

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { workout, UNDO_MS } from '../lib/workout.svelte';
-  import { exerciseById, rangeFor, TEMPLATES } from '../lib/seed';
+  import { exerciseById, rangeFor, sessionName, templateFor } from '../lib/seed';
   import { addWeightDue, isPR } from '../lib/progression';
   import { buildCards, finishAt, fmtClock, fmtElapsed, fmtKg, fmtTime, meter, nextUp, remaining, round2 } from '../lib/workoutView';
   import { buzz } from '../lib/device';
@@ -26,7 +26,7 @@
   let drafts = $state<Record<string, Draft>>({});
 
   const w = $derived(workout.current);
-  const template = $derived(w ? TEMPLATES.find((t) => t.id === w.sessionId) : undefined);
+  const template = $derived(w ? templateFor(w.sessionId) : undefined);
   const planned = $derived(w ? workout.plannedSets() : []);
   const cards = $derived(buildCards(planned, workout.sets));
   const progress = $derived(meter(cards));
@@ -302,7 +302,7 @@
         <button class="back" type="button" aria-label="Back to Today" onclick={() => (location.hash = '#/')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
         </button>
-        <h1>{template?.name ?? 'Workout'}</h1>
+        <h1>{template?.name ?? (w ? sessionName(w.sessionId) : undefined) ?? 'Workout'}</h1>
         <div class="clock" aria-label="Workout time {elapsed}">
           <b data-testid="elapsed">{elapsed}</b>
           <span>{workout.active ? `Finish ≈ ${finishLabel}` : 'Ended'}</span>

@@ -1,4 +1,5 @@
-import type { Exercise, Muscle, SessionId, SessionTemplate } from './types';
+import { getActivePlan, getRetiredNames } from './activePlan.svelte';
+import type { Exercise, Muscle, Plan, SessionId, SessionTemplate } from './types';
 
 const slug = (n: string) =>
   n.toLowerCase().replace(/[()]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -58,6 +59,19 @@ const LIB: Row[] = [
   ['Triceps', 'Rope pushdown', 'Triceps', 'Cable', 'i', 10, 12],
   ['Triceps', 'Overhead cable extension', 'Triceps', 'Cable', 'i', 10, 12],
   ['Triceps', 'Single-arm rope extension', 'Triceps', 'Cable', 'i', 10, 12, { perArm: true }],
+  // Common gym exercises added for the setup flow. Each has a slot of its own, so the Swap lists of the
+  // original exercises (Vik's plan) do not change; plans from the setup flow link them (NEW_USER_SWAPS).
+  ['Squat', 'Goblet squat', 'Quads', 'Dumbbells', 'c', 8, 12],
+  ['Squat', 'Smith squat', 'Quads', 'Smith', 'c', 8, 12],
+  ['Squat', 'Barbell back squat', 'Quads', 'Barbell', 'c', 5, 8],
+  ['Single-leg', 'Split squat', 'Quads', 'Dumbbells', 'c', 8, 12],
+  ['Single-leg', 'Walking lunge', 'Quads', 'Dumbbells', 'c', 8, 12],
+  ['Glutes', 'Hip thrust', 'Hamstrings', 'Barbell', 'c', 8, 12],
+  ['Barbell press', 'Barbell bench press', 'Chest', 'Barbell', 'c', 5, 8],
+  ['Push-up', 'Push-up', 'Chest', 'Bodyweight', 'c', 8, 15],
+  ['Dumbbell row', 'DB row', 'Back', 'Dumbbells', 'c', 8, 12, { perArm: true }],
+  ['Back extension', 'Back extension', 'Back', 'Bodyweight', 'i', 10, 15],
+  ['Core', 'Dead bug', 'Abs', 'Bodyweight', 'i', 8, 12],
 ];
 
 // 2.5 kg everywhere (machines and cable stacks at Vik's gym step 10 -> 12.5); per-exercise override in Settings.
@@ -81,12 +95,24 @@ export function exerciseById(id: string): Exercise | undefined {
 /** Back exercises that can stand in for each other across slots (symmetric). */
 const LINKED_SWAPS = ['straight-arm-cable-pulldown', 'single-arm-cable-row', 'wide-grip-cable-row'];
 
-/** Swap list for an exercise: everything in its slot plus any linked exercises. */
-export function swapOptions(exerciseId: string): Exercise[] {
+/** Extra swap groups for plans made in the setup flow (not Vik's): simple alternatives for the same job. */
+export const NEW_USER_SWAPS: string[][] = [
+  ['leg-press', 'goblet-squat', 'smith-squat'],
+  ['machine-chest-press', 'db-incline-press', 'converging-chest-press', 'push-up'],
+  ['romanian-deadlift', 'hip-thrust', 'db-romanian-deadlift'],
+  ['split-squat', 'walking-lunge'],
+  ['db-curl', 'bar-pushdown', 'rope-pushdown', 'cable-curl'],
+  ['cable-crunch', 'dead-bug', 'hanging-knee-raise'],
+  ['seated-machine-row', 'cable-row-v-handle', 'db-row'],
+];
+
+/** Swap list for an exercise: everything in its slot plus any linked exercises (and `extra` groups it belongs to). */
+export function swapOptions(exerciseId: string, extra: string[][] = []): Exercise[] {
   const ex = byId.get(exerciseId);
   if (!ex) return [];
   const ids = new Set(EXERCISES.filter((e) => e.slot === ex.slot).map((e) => e.id));
   if (LINKED_SWAPS.includes(exerciseId)) for (const id of LINKED_SWAPS) ids.add(id);
+  for (const g of extra) if (g.includes(exerciseId)) for (const id of g) ids.add(id);
   return EXERCISES.filter((e) => ids.has(e.id));
 }
 
@@ -97,7 +123,7 @@ const SWAP_RANGES: Partial<Record<SessionId, Record<string, { repMin: number; re
 
 /** Effective rep range: template item override, then swap override, then library. */
 export function rangeFor(sessionId: SessionId, exerciseId: string): { repMin: number; repMax: number } {
-  const item = TEMPLATES.find((t) => t.id === sessionId)?.items.find((i) => i.exerciseId === exerciseId);
+  const item = templateFor(sessionId)?.items.find((i) => i.exerciseId === exerciseId);
   if (item?.repMin !== undefined && item.repMax !== undefined) return { repMin: item.repMin, repMax: item.repMax };
   const swap = SWAP_RANGES[sessionId]?.[exerciseId];
   if (swap) return swap;
@@ -133,3 +159,60 @@ export const TEMPLATES: SessionTemplate[] = [
     ['Machine shoulder press', 3, 10, 12], ['Cable lateral raise', 4], ['Rope face pull', 3], ['Hammer curl', 3], ['Rope pushdown', 3],
   ]),
 ];
+
+// ---- plans ------------------------------------------------------------------------------------------
+
+/** Vik's own split, the built-in plan 'vik': Mon-Sat. Its sessions are the TEMPLATES above. */
+export const VIK_PLAN: Plan = { id: 'vik', name: "Vik's split", sessions: TEMPLATES, days: [1, 2, 3, 4, 5, 6], weeklyTarget: 6 };
+
+/** Compounds 8-12 reps, isolation 10-15: the starting ranges of the suggested plan. Double progression stays. */
+export function newUserRange(exerciseId: string): { repMin: number; repMax: number } {
+  return byId.get(exerciseId)?.kind === 'compound' ? { repMin: 8, repMax: 12 } : { repMin: 10, repMax: 15 };
+}
+
+const fb = (id: string, name: string, variant: 'A' | 'B', rows: [string, number][]): SessionTemplate => ({
+  id, name, variant,
+  items: rows.map(([exerciseId, sets]) => ({ exerciseId, sets, ...newUserRange(exerciseId) })),
+});
+
+/** Full body A/B for 2-3 days a week: machines and simple lifts first, 2-3 sets each. */
+export const FULLBODY_SESSIONS: SessionTemplate[] = [
+  fb('fb-a', 'Full body A', 'A', [
+    ['leg-press', 3], ['machine-chest-press', 3], ['seated-machine-row', 3], ['machine-shoulder-press', 2], ['cable-crunch', 2],
+  ]),
+  fb('fb-b', 'Full body B', 'B', [
+    ['hip-thrust', 3], ['lat-pulldown-wide', 3], ['db-incline-press', 3], ['split-squat', 2], ['db-curl', 2], ['dead-bug', 2],
+  ]),
+];
+
+export function fullBodyPlan(days: number[]): Plan {
+  const sessions = FULLBODY_SESSIONS.map((t) => ({ ...t, items: t.items.map((i) => ({ ...i })) }));
+  return { id: 'fullbody', name: 'Full body A/B', sessions, days: [...days], weeklyTarget: days.length };
+}
+
+/** Plan in effect: the one loaded from settings, else Vik's. */
+export function currentPlan(): Plan {
+  return getActivePlan() ?? VIK_PLAN;
+}
+
+export function templateFor(sessionId: SessionId): SessionTemplate | undefined {
+  return currentPlan().sessions.find((t) => t.id === sessionId);
+}
+
+/**
+ * Name of a session, for old sets too: the active plan, then Vik's and the Full body sessions (always known),
+ * then sessions of plans that were replaced. Undefined when nothing knows it.
+ */
+export function sessionName(sessionId: SessionId): string | undefined {
+  return (
+    templateFor(sessionId)?.name ??
+    TEMPLATES.find((t) => t.id === sessionId)?.name ??
+    FULLBODY_SESSIONS.find((t) => t.id === sessionId)?.name ??
+    getRetiredNames()[sessionId]
+  );
+}
+
+/** The stored plan with its sessions filled in (Vik's are not stored). */
+export function resolvePlan(stored: Plan): Plan {
+  return stored.id === 'vik' ? { ...stored, name: VIK_PLAN.name, sessions: TEMPLATES } : stored;
+}

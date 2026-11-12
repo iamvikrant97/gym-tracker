@@ -1,6 +1,7 @@
 export type Muscle = 'Chest' | 'Back' | 'Shoulders' | 'Biceps' | 'Triceps' | 'Quads' | 'Hamstrings' | 'Calves' | 'Abs' | 'Other';
 export type Group = 'CB' | 'L' | 'SA';
-export type SessionId = 'CB-A' | 'CB-B' | 'L-A' | 'L-B' | 'SA-A' | 'SA-B';
+/** Vik's ids are 'CB-A' ... 'SA-B'; plans made in the setup flow use their own ids ('fb-a', 'c1-ab12', ...). */
+export type SessionId = string;
 
 export interface Exercise {
   id: string;
@@ -28,9 +29,24 @@ export interface TemplateItem {
 export interface SessionTemplate {
   id: SessionId;
   name: string;
-  group: Group;
-  variant: 'A' | 'B';
+  /** Rotation by body-part group and A/B variant (Vik's split). Plans without it simply take turns, in order. */
+  group?: Group;
+  variant?: 'A' | 'B';
   items: TemplateItem[];
+}
+
+/**
+ * A training plan is data: sessions in order, which weekdays are training days, and the weekly target.
+ * Stored in the settings row. The built-in plan 'vik' is stored without sessions (they come from the code).
+ */
+export interface Plan {
+  /** 'vik', 'fullbody' or 'custom'. */
+  id: string;
+  name: string;
+  sessions: SessionTemplate[];
+  /** Training weekdays, 0 = Sunday ... 6 = Saturday (JS Date.getDay). */
+  days: number[];
+  weeklyTarget: number;
 }
 
 export interface SetLog {
@@ -83,4 +99,10 @@ export interface Settings {
   perArmConfirmed?: boolean;
   /** permanent swaps */
   templateOverrides: Partial<Record<SessionId, Record<string, string>>>;
+  /** The active training plan. Missing on a brand-new install (the setup flow runs). */
+  plan?: Plan;
+  /** Names of sessions from plans that were replaced, so old sets keep their label in the calendar and summary. */
+  retiredSessions?: Record<SessionId, string>;
+  /** Greeting name. Undefined = the original install (Vik); the setup flow saves '' (no name). */
+  userName?: string;
 }

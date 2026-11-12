@@ -1,5 +1,6 @@
 import { openDB, deleteDB, type IDBPDatabase } from 'idb';
-import { EXERCISES, exerciseById, swapOptions } from './seed';
+import { getActivePlan } from './activePlan.svelte';
+import { EXERCISES, NEW_USER_SWAPS, exerciseById, swapOptions } from './seed';
 import type { Exercise, Settings } from './types';
 
 export const DB_NAME = 'gym-tracker';
@@ -126,7 +127,10 @@ export async function exerciseLookup(id: string): Promise<Exercise | undefined> 
 export function mergedSwapOptions(exerciseId: string, custom: Exercise[]): Exercise[] {
   const base = exerciseById(exerciseId) ?? custom.find((e) => e.id === exerciseId);
   if (!base) return [];
-  const seed = exerciseById(exerciseId) ? swapOptions(exerciseId) : EXERCISES.filter((e) => e.slot === base.slot);
+  // Plans from the setup flow also swap between simple alternatives (leg press <-> goblet squat); Vik's do not.
+  const plan = getActivePlan();
+  const extra = plan && plan.id !== 'vik' ? NEW_USER_SWAPS : [];
+  const seed = exerciseById(exerciseId) ? swapOptions(exerciseId, extra) : EXERCISES.filter((e) => e.slot === base.slot);
   return [...seed, ...custom.filter((e) => e.slot === base.slot)];
 }
 

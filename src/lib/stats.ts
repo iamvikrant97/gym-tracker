@@ -1,5 +1,5 @@
 import { e1rm, isPR } from './progression';
-import { exerciseById, TEMPLATES } from './seed';
+import { exerciseById, sessionName } from './seed';
 import type { Exercise, Muscle, SetLog, Settings, Workout } from './types';
 
 const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
@@ -223,7 +223,7 @@ export function dayVisits(date: string, workouts: Workout[], sets: SetLog[], loo
     // Imported workouts get a made-up end (1 min per set, see sync.importFromSheet): show no duration for them.
     const imported = dayWorkouts.filter((x) => visitKey(x) === vk).every((x) => x.id.startsWith(IMPORT_ID_PREFIX));
     const minutes = imported || merged.workout.endedAt === undefined ? null : Math.round(Math.max(0, merged.workout.endedAt - merged.workout.startedAt) / 60_000);
-    build(vk, TEMPLATES.find((t) => t.id === w.sessionId)?.name ?? 'Workout', minutes, mine);
+    build(vk, sessionName(w.sessionId) ?? 'Workout', minutes, mine);
   }
   const known = new Set(dayWorkouts.map((w) => w.id));
   build(`${date}|orphan`, 'Workout', null, daySets.filter((x) => !known.has(x.workoutId)));

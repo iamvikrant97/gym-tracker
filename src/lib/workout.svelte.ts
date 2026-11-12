@@ -4,7 +4,8 @@ import {
 import type { QueueItem } from './db';
 import { scheduleFlush } from './sync';
 import { isPR, lastSessionSets, targetFor } from './progression';
-import { exerciseById, rangeFor, TEMPLATES } from './seed';
+import { setActivePlan, setRetiredNames } from './activePlan.svelte';
+import { exerciseById, rangeFor, resolvePlan, templateFor } from './seed';
 import type { Exercise, SessionId, SetLog, Settings, Workout } from './types';
 
 /** An open workout with no set for this long is closed (Finish forgotten). Rests are at most 5 min; calls and queues happen. */
@@ -27,6 +28,12 @@ export interface PlannedSet {
   setNo: number;
   target: { kg: number; reps: number } | null;
   last: SetLog | null;
+}
+
+/** Puts the stored plan (and the names of replaced sessions) in effect. Settings without a plan leave it as it is. */
+function applyPlan(s: Settings) {
+  if (s.plan) setActivePlan(resolvePlan(s.plan));
+  setRetiredNames(s.retiredSessions);
 }
 
 const live = (s: SetLog) => !s.deleted;
@@ -78,6 +85,7 @@ export class WorkoutStore {
   /** Merges into the stored settings in one transaction (never overwrites other writers) and refreshes memory. */
   async updateSettings(change: Partial<Settings> | ((cur: Settings) => Settings)): Promise<Settings> {
     this.settings = await updateSettings(change);
+    applyPlan(this.settings);
     return this.settings;
   }
 
@@ -91,6 +99,7 @@ export class WorkoutStore {
 
   async #loadShared() {
     this.settings = await loadSettings();
+    applyPlan(this.settings);
     this.customExercises = await getAll<Exercise>('customExercises');
   }
 
@@ -322,7 +331,7 @@ export class WorkoutStore {
   plannedSets(): PlannedSet[] {
     const w = this.current;
     if (!w) return [];
-    const tpl = TEMPLATES.find((t) => t.id === w.sessionId);
+    const tpl = templateFor(w.sessionId);
     if (!tpl) return [];
     const out: PlannedSet[] = [];
     for (const item of tpl.items) {
@@ -468,7 +477,7 @@ export class WorkoutStore {
     return this.#run(async () => {
       const w = this.current;
       if (!w) throw new Error('No workout');
-      const tpl = TEMPLATES.find((t) => t.id === w.sessionId);
+      const tpl = templateFor(w.sessionId);
       // Accept either the template's own id or the id currently in effect for that slot.
       const item =
         tpl?.items.find((i) => i.exerciseId === templateExerciseId) ??

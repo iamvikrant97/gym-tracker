@@ -36,7 +36,7 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
 
   // ---- Home ----
   await page.goto('./');
-  await expect(page.getByRole('button', { name: 'Start workout' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How many days a week?' })).toBeVisible();
   await seed(page);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Chest + Back B' })).toBeVisible();

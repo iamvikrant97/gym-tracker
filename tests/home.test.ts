@@ -230,6 +230,7 @@ describe('Nav and App routes', () => {
   });
 
   it('App renders Home at the root with the nav', async () => {
+    await seedHistory(); // an install with data is Vik's: Home, not the first-run setup
     render(App);
     expect(await screen.findByRole('button', { name: 'Start workout' })).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeTruthy();

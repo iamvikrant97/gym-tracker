@@ -1,4 +1,4 @@
-import type { Group, SessionId, SessionTemplate, Workout } from './types';
+import type { Group, Plan, SessionId, SessionTemplate, Workout } from './types';
 
 const GROUP_ORDER: Group[] = ['CB', 'L', 'SA'];
 
@@ -11,7 +11,7 @@ const GROUP_ORDER: Group[] = ['CB', 'L', 'SA'];
 export function nextSession(workouts: Workout[], templates: SessionTemplate[]): SessionId {
   const info = (id: SessionId): { group: Group; variant: 'A' | 'B' } => {
     const t = templates.find((x) => x.id === id);
-    if (t) return { group: t.group, variant: t.variant };
+    if (t?.group && t.variant) return { group: t.group, variant: t.variant };
     const [g, v] = id.split('-');
     return { group: g as Group, variant: v as 'A' | 'B' };
   };
@@ -36,4 +36,35 @@ export function nextSession(workouts: Workout[], templates: SessionTemplate[]): 
   const last = latest.get(g);
   const variant = !last ? 'A' : last.variant === 'A' ? 'B' : 'A';
   return `${g}-${variant}` as SessionId;
+}
+
+/**
+ * Next session of any plan. Plans with body-part groups (Vik's split) use nextSession(). Others take turns:
+ * the session after the one trained last (by date, then start time), in plan order, from the first one at the
+ * start. Workouts of sessions that are not in the plan (an older plan) are ignored. Which weekday it is does not
+ * matter: a missed day never skips a session.
+ */
+export function nextInPlan(plan: Plan, workouts: Workout[]): SessionId {
+  const sessions = plan.sessions;
+  if (sessions.length === 0) throw new Error('This plan has no sessions');
+  if (sessions.every((t) => t.group)) return nextSession(workouts, sessions);
+  let last: Workout | undefined;
+  for (const w of workouts) {
+    if (!sessions.some((t) => t.id === w.sessionId)) continue;
+    if (!last || w.date > last.date || (w.date === last.date && w.startedAt > last.startedAt)) last = w;
+  }
+  if (!last) return sessions[0].id;
+  const at = sessions.findIndex((t) => t.id === last!.sessionId);
+  return sessions[(at + 1) % sessions.length].id;
+}
+
+/** The plan's week from scratch: each training day with the session it starts with. */
+export function weekSchedule(plan: Plan): { day: number; session: SessionTemplate }[] {
+  const days = [...plan.days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)); // Monday first
+  const done: Workout[] = [];
+  return days.map((day, i) => {
+    const id = nextInPlan(plan, done);
+    done.push({ id: `sim${i}`, date: `2000-01-${String(i + 1).padStart(2, '0')}`, sessionId: id, startedAt: i, swaps: {} });
+    return { day, session: plan.sessions.find((t) => t.id === id)! };
+  });
 }

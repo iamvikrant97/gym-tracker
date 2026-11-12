@@ -1,10 +1,11 @@
 <script lang="ts">
   import { getAll, loadSettings, DEFAULT_SETTINGS } from '../lib/db';
-  import { exerciseById, TEMPLATES } from '../lib/seed';
+  import { currentPlan, exerciseById, templateFor } from '../lib/seed';
   import { homeNotes, visitKey, visitKeysInWeek } from '../lib/stats';
   import { showToast } from '../ui/toast.svelte';
   import { onMount } from 'svelte';
-  import { nextSession } from '../lib/selection';
+  import { nextInPlan } from '../lib/selection';
+  import { trainingDayNote } from '../lib/planSetup';
   import { workout, localDate } from '../lib/workout.svelte';
   import { estimateMinutes } from '../lib/workoutView';
   import type { SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
@@ -14,7 +15,7 @@
 
   let workouts = $state.raw<Workout[]>([]);
   let sets = $state.raw<SetLog[]>([]);
-  let settings = $state.raw<Settings>(DEFAULT_SETTINGS);
+  let settings = $state.raw<Settings>(workout.settings ?? DEFAULT_SETTINGS);
   let picked = $state<SessionId | null>(null);
   let swapOpen = $state(false);
 
@@ -64,9 +65,11 @@
     load();
   });
 
+  const planNow = $derived(currentPlan());
   const resuming = $derived(workout.active);
   // Closed by the idle rule earlier today (a call, a queue for the bench): offer to carry on with it.
-  const continuing = $derived(!resuming && picked === null && !!workout.current && workout.canResume(now));
+  // (a session of a plan that was since replaced is not continued)
+  const continuing = $derived(!resuming && picked === null && !!workout.current && !!templateFor(workout.current.sessionId) && workout.canResume(now));
   const following = $derived(resuming || continuing);
   // A workout with no sets (discarded, or opened by mistake and closed) does not move the rotation on.
   const counted = $derived.by(() => {
@@ -74,10 +77,13 @@
     return workouts.filter((w) => withSets.has(w.id) || w.id === workout.current?.id);
   });
   const sessionId = $derived<SessionId>(
-    following ? workout.current!.sessionId : (picked ?? nextSession(counted, TEMPLATES)),
+    following ? workout.current!.sessionId : (picked ?? nextInPlan(planNow, counted)),
+  );
+  const swapSub = $derived(
+    planNow.sessions.length === 1 ? 'Your session' : `Pick any of your ${planNow.sessions.length === 6 ? 'six' : planNow.sessions.length} sessions`,
   );
   const resumingEmpty = $derived(resuming && workout.sets.length === 0);
-  const template = $derived(TEMPLATES.find((t) => t.id === sessionId)!);
+  const template = $derived(templateFor(sessionId) ?? planNow.sessions[0]);
 
   const effectiveId = (t: SessionTemplate, templateId: string) =>
     (following ? workout.current?.swaps[templateId] : undefined) ?? settings.templateOverrides[t.id]?.[templateId] ?? templateId;
@@ -102,7 +108,12 @@
   const sessionNo = $derived(
     Math.max(1, following && visits.has(visitKey(workout.current!)) ? visits.size : visits.size + 1),
   );
-  const notes = $derived(homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)));
+  // userName is undefined only on the original install (Vik's): new installs get the plain greeting and a days note.
+  const who = $derived(settings.userName === undefined ? 'Vik' : settings.userName);
+  const notes = $derived([
+    ...homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)),
+    ...(settings.userName === undefined ? [] : [trainingDayNote(planNow, new Date(now))].filter(Boolean)),
+  ]);
 
   /** Splits a note into plain and emphasised parts (counts and ages read as the figures). */
   function parts(line: string): { text: string; strong: boolean }[] {
@@ -154,7 +165,7 @@
     </button>
   </div>
 
-  <h1 class="greet">{greeting}, Vik</h1>
+  <h1 class="greet">{who ? `${greeting}, ${who}` : greeting}</h1>
 
   <article class="today">
     <div class="lbl">Today · session {sessionNo} of {settings.weeklyTarget}</div>
@@ -182,9 +193,9 @@
   </div>
 </section>
 
-<Sheet open={swapOpen} onclose={() => (swapOpen = false)} title="Swap day" sub="Pick any of your six sessions">
+<Sheet open={swapOpen} onclose={() => (swapOpen = false)} title="Swap day" sub={swapSub}>
   <div role="radiogroup" aria-label="Session">
-    {#each TEMPLATES as t (t.id)}
+    {#each planNow.sessions as t (t.id)}
       {@const info = describe(t)}
       <button type="button" role="radio" class="opt press" aria-checked={t.id === sessionId} onclick={() => choose(t.id)}>
         <span>

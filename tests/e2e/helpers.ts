@@ -75,7 +75,8 @@ export async function mockBridge(page: Page) {
 /** Fresh app with the seeded history, on Home. */
 export async function openSeeded(page: Page) {
   await page.goto('./');
-  await page.getByRole('button', { name: 'Start workout' }).waitFor();
+  // An empty install opens the first-run setup (the database exists by then); seeding data makes it Vik's install.
+  await page.getByRole('heading', { name: 'How many days a week?' }).waitFor();
   await seed(page);
   await page.reload();
   await page.getByRole('heading', { name: 'Chest + Back B' }).waitFor();

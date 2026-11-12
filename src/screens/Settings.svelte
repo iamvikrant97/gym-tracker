@@ -13,6 +13,8 @@
   import { redirectUri, disconnect } from '../lib/spotify/auth';
   import { spotify } from '../lib/spotify/player.svelte';
   import { workout, localDate, MAX_REST_SEC } from '../lib/workout.svelte';
+  import { daysLabel } from '../lib/planSetup';
+  import { currentPlan } from '../lib/seed';
   import { fmtClock, fmtKg } from '../lib/workoutView';
   import Sheet from '../ui/Sheet.svelte';
   import AddExerciseForm from '../ui/AddExerciseForm.svelte';
@@ -40,6 +42,10 @@
   let attention = $state(0);
   let addFor = $state<Muscle | null>(null);
   let fileInput: HTMLInputElement | undefined = $state();
+  let loaded = $state(false);
+  const plan = $derived(currentPlan());
+  /** No Sheet: this phone is the only copy, so the backup reminder shows. */
+  const localOnly = $derived(loaded && !settings.scriptUrl);
 
   async function load() {
     settings = await loadSettings();
@@ -48,6 +54,7 @@
     key = settings.scriptKey ?? '';
     clientId = settings.spotifyClientId ?? '';
     bodyKg = String(settings.bodyKg ?? 65);
+    loaded = true;
   }
 
   async function refreshStatus() {
@@ -370,6 +377,18 @@
     {#if workout.active}<p class="hint">A workout is open. Finish it before repeating the last one.</p>{/if}
   </article>
 
+  <!-- Training plan -->
+  <article class="card" aria-label="Training plan">
+    <h2>Training plan</h2>
+    <p class="status" data-testid="plan-name">{plan.name}</p>
+    <p class="hint" data-testid="plan-days">{daysLabel(plan.days)} · {plan.weeklyTarget} a week</p>
+    <ul class="plan-list">
+      {#each plan.sessions as t (t.id)}<li>{t.name}<small>{t.items.length} exercises</small></li>{/each}
+    </ul>
+    <button class="secondary wide press" type="button" disabled={workout.active} onclick={() => (location.hash = '#/setup')}>Change plan</button>
+    <p class="hint">{workout.active ? 'A workout is open. Finish it before changing the plan.' : 'Your history stays as it is: every set is kept with its exercise.'}</p>
+  </article>
+
   <!-- Exercises -->
   <article class="card">
     <h2>Exercises</h2>
@@ -400,6 +419,7 @@
   <!-- Backup -->
   <article class="card">
     <h2>Backup</h2>
+    {#if localOnly}<p class="status" data-testid="backup-reminder">Export a backup every few weeks. Your history is only on this phone.</p>{/if}
     <p class="hint">The Sheet is your main backup. This file is a second copy of everything on this phone (without the key or Spotify login).</p>
     <div class="pair">
       <button class="secondary press" type="button" onclick={exportFile}>Export backup</button>
@@ -467,6 +487,9 @@
   .msg { margin: 0; font-size: 13px; color: var(--text); }
   .msg.bad { color: var(--amber); }
   .sub { margin: 8px 0 0; font: 600 14px/1.2 var(--body); }
+  .plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14.5px; }
+  .plan-list li { display: flex; align-items: baseline; gap: 8px; }
+  .plan-list small { margin-left: auto; color: var(--muted); font-size: 12.5px; }
   .dups small { display: block; color: var(--muted); font-size: 12px; }
   .dups { margin: 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 4px; }
   .pair > .primary { width: auto; height: 48px; font-size: 14px; }
