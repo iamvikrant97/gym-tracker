@@ -108,11 +108,13 @@
   const sessionNo = $derived(
     Math.max(1, following && visits.has(visitKey(workout.current!)) ? visits.size : visits.size + 1),
   );
-  // userName is undefined only on the original install (Vik's): new installs get the plain greeting and a days note.
-  const who = $derived(settings.userName === undefined ? 'Vik' : settings.userName);
+  // A stored name wins. With no name: no plan yet (the original install, before migration) is Vik's; a plan means a new install,
+  // which gets the plain greeting and the training-days note.
+  const who = $derived(settings.userName ?? (settings.plan ? '' : 'Vik'));
+  const isVik = $derived(!settings.plan || settings.userName === 'Vik');
   const notes = $derived([
     ...homeNotes(sets, workouts, settings, today, (id) => workout.exercise(id)),
-    ...(settings.userName === undefined ? [] : [trainingDayNote(planNow, new Date(now))].filter(Boolean)),
+    ...(isVik ? [] : [trainingDayNote(planNow, new Date(now))].filter(Boolean)),
   ]);
 
   /** Splits a note into plain and emphasised parts (counts and ages read as the figures). */

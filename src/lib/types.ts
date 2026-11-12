@@ -15,6 +15,8 @@ export interface Exercise {
   restSec: number;
   perArm?: boolean;
   assisted?: boolean;
+  /** Bodyweight move: always 0 kg, progresses by reps only. */
+  bodyweight?: boolean;
   note?: string;
 }
 
@@ -103,6 +105,6 @@ export interface Settings {
   plan?: Plan;
   /** Names of sessions from plans that were replaced, so old sets keep their label in the calendar and summary. */
   retiredSessions?: Record<SessionId, string>;
-  /** Greeting name. Undefined = the original install (Vik); the setup flow saves '' (no name). */
+  /** Greeting name. Written as 'Vik' when an existing install is migrated; new installs leave it unset (plain greeting). Backups carry it. */
   userName?: string;
 }

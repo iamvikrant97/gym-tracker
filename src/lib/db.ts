@@ -115,7 +115,9 @@ export async function updateSettings(change: Partial<Settings> | ((cur: Settings
 // ---- Exercises: seed library + user-added ones ------------------------------------------
 
 export async function listExercises(): Promise<Exercise[]> {
-  return [...EXERCISES, ...(await getAll<Exercise>('customExercises'))];
+  // A custom exercise named like a library one (the library gained some) is hidden: its sets still resolve by id.
+  const taken = new Set(EXERCISES.map((e) => e.name.trim().toLowerCase()));
+  return [...EXERCISES, ...(await getAll<Exercise>('customExercises')).filter((e) => !taken.has(e.name.trim().toLowerCase()))];
 }
 
 /** Resolves a seed or custom exercise id. */

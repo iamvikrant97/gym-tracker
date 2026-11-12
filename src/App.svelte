@@ -10,6 +10,7 @@
   import Summary from './screens/Summary.svelte';
   import Settings from './screens/Settings.svelte';
   import Setup from './screens/Setup.svelte';
+  import Restore from './screens/Restore.svelte';
   import { initPlan, type PlanGate } from './lib/planSetup';
   import { lastSyncAt, onImported, onSyncChange, startAutoSync, syncLabel, syncStatus } from './lib/sync';
   import RestDock from './ui/RestDock.svelte';
@@ -33,8 +34,30 @@
 
   // 'loading' until the stored plan is known. An empty install with no plan runs the setup flow instead of Home;
   // an install that already has sets or workouts is Vik's and gets plan 'vik' silently (see initPlan).
-  let gate = $state<'loading' | PlanGate>('loading');
+  let gate = $state<'loading' | 'error' | PlanGate>('loading');
+  let restoring = $state(false);
   const setupOpen = $derived(gate === 'setup' || (gate === 'ready' && route === 'setup'));
+  /** Called after a restore or Sheet import: if there is data now, the install is Vik's and Home opens. */
+  async function recheck(): Promise<boolean> {
+    const g = await initPlan();
+    if (g !== 'ready') return false;
+    await workout.refreshShared().catch(() => undefined);
+    restoring = false;
+    gate = 'ready';
+    location.hash = '#/';
+    route = 'home';
+    return true;
+  }
+  function open() {
+    gate = 'loading';
+    // Home opens only once the store has the settings too, so a new install never flashes the original greeting.
+    initPlan()
+      .then(async (g) => {
+        if (g === 'ready') await workout.refreshShared().catch(() => undefined);
+        gate = g;
+      })
+      .catch(() => (gate = 'error')); // a failed read must never look like Vik's install
+  }
   function finishSetup() {
     gate = 'ready';
     location.hash = '#/';
@@ -52,13 +75,7 @@
   const showNav = $derived(gate === 'ready' && ['home', 'workout', 'progress', 'week'].includes(route));
 
   onMount(() => {
-    // Home opens only once the store has the settings too, so a new install never flashes the original greeting.
-    initPlan()
-      .then(async (g) => {
-        if (g === 'ready') await workout.refreshShared().catch(() => undefined);
-        gate = g;
-      })
-      .catch(() => (gate = 'ready'));
+    open();
     workout.restore().catch(() => undefined);
     // Sync: queue flushes on start, after each set (2 s debounce), when back online / visible / leaving.
     startAutoSync();
@@ -83,8 +100,16 @@
 <main data-route={route}>
   {#if gate === 'loading'}
     <!-- the stored plan is being read -->
+  {:else if gate === 'error'}
+    <section class="screen">
+      <h1 class="page-title">Could not open your data</h1>
+      <p class="muted" role="alert">Your phone would not open its storage. Nothing was changed.</p>
+      <button class="retry btn-primary press" type="button" onclick={open}>Try again</button>
+    </section>
+  {:else if gate === 'setup' && restoring}
+    <Restore onback={() => (restoring = false)} onrecheck={recheck} />
   {:else if setupOpen}
-    <Setup firstRun={gate === 'setup'} onfinish={finishSetup} oncancel={() => (location.hash = '#/settings')} />
+    <Setup firstRun={gate === 'setup'} onfinish={finishSetup} oncancel={() => (location.hash = '#/settings')} onrestore={() => (restoring = true)} />
   {:else if Screen}
     <Screen syncStatus={sync.text} syncWarn={sync.warn} />
   {:else}
@@ -107,6 +132,7 @@
 <Toast message={toasts.message} onhide={clearToast} />
 
 <style>
+  .retry { height: 56px; width: 100%; border-radius: 14px; font-size: 16px; }
   .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; pointer-events: none; }
   /* Bars take taps; sheets, scrims and the rest dock decide for themselves, so a closed one never blocks a tap. */
   .dock > :global(*:not(.scrim):not(.sheet):not(.rest)) { pointer-events: auto; }

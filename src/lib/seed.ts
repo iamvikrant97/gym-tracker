@@ -68,10 +68,10 @@ const LIB: Row[] = [
   ['Single-leg', 'Walking lunge', 'Quads', 'Dumbbells', 'c', 8, 12],
   ['Glutes', 'Hip thrust', 'Hamstrings', 'Barbell', 'c', 8, 12],
   ['Barbell press', 'Barbell bench press', 'Chest', 'Barbell', 'c', 5, 8],
-  ['Push-up', 'Push-up', 'Chest', 'Bodyweight', 'c', 8, 15],
+  ['Push-up', 'Push-up', 'Chest', 'Bodyweight', 'c', 8, 15, { bodyweight: true }],
   ['Dumbbell row', 'DB row', 'Back', 'Dumbbells', 'c', 8, 12, { perArm: true }],
-  ['Back extension', 'Back extension', 'Back', 'Bodyweight', 'i', 10, 15],
-  ['Core', 'Dead bug', 'Abs', 'Bodyweight', 'i', 8, 12],
+  ['Back extension', 'Back extension', 'Back', 'Bodyweight', 'i', 10, 15, { bodyweight: true }],
+  ['Core', 'Dead bug', 'Abs', 'Bodyweight', 'i', 8, 12, { bodyweight: true }],
 ];
 
 // 2.5 kg everywhere (machines and cable stacks at Vik's gym step 10 -> 12.5); per-exercise override in Settings.
@@ -101,7 +101,8 @@ export const NEW_USER_SWAPS: string[][] = [
   ['machine-chest-press', 'db-incline-press', 'converging-chest-press', 'push-up'],
   ['romanian-deadlift', 'hip-thrust', 'db-romanian-deadlift'],
   ['split-squat', 'walking-lunge'],
-  ['db-curl', 'bar-pushdown', 'rope-pushdown', 'cable-curl'],
+  ['db-curl', 'cable-curl', 'hammer-curl'],
+  ['bar-pushdown', 'rope-pushdown'],
   ['cable-crunch', 'dead-bug', 'hanging-knee-raise'],
   ['seated-machine-row', 'cable-row-v-handle', 'db-row'],
 ];

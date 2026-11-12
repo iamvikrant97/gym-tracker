@@ -32,10 +32,19 @@ describe('Settings: Training plan', () => {
     render(Settings);
     const card = await screen.findByRole('article', { name: 'Training plan' });
     expect(within(card).getByTestId('plan-name').textContent).toBe('Full body A/B');
-    expect(within(card).getByTestId('plan-days').textContent).toBe('Mon · Wed · Fri · 3 a week');
+    await waitFor(() => expect(within(card).getByTestId('plan-days').textContent).toBe('Mon · Wed · Fri · 3 a week'));
     expect(within(card).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Full body A5 exercises', 'Full body B6 exercises']);
     await fireEvent.click(within(card).getByRole('button', { name: 'Change plan' }));
     expect(location.hash).toBe('#/setup');
+  });
+
+  it('the card reads the live weekly target, not the copy stored with the plan', async () => {
+    const plan = { ...fullBodyPlan([1, 3, 5]), weeklyTarget: 3 };
+    await saveSettings({ ...DEFAULT_SETTINGS, plan, weeklyTarget: 4 });
+    setActivePlan(plan);
+    render(Settings);
+    const card = await screen.findByRole('article', { name: 'Training plan' });
+    await waitFor(() => expect(within(card).getByTestId('plan-days').textContent).toBe('Mon · Wed · Fri · 4 a week'));
   });
 
   it("Vik's own install shows his split with six sessions", async () => {

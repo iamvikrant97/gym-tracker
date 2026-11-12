@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setActivePlan, setRetiredNames, getActivePlan } from '../src/lib/activePlan.svelte';
-import { closeDb, getAll, loadSettings, put, saveSettings, DEFAULT_SETTINGS } from '../src/lib/db';
+import { closeDb, getAll, listExercises, loadSettings, openDb, put, saveSettings, DEFAULT_SETTINGS } from '../src/lib/db';
+import { addWeightDue, targetFor } from '../src/lib/progression';
+import { exportAll, restoreBackup } from '../src/lib/backup';
 import { defaultDays, daysLabel, initPlan, trainingDayNote } from '../src/lib/planSetup';
 import { EXERCISES, FULLBODY_SESSIONS, TEMPLATES, VIK_PLAN, currentPlan, exerciseById, fullBodyPlan, rangeFor, sessionName, swapOptions } from '../src/lib/seed';
 import { nextInPlan, nextSession, weekSchedule } from '../src/lib/selection';
@@ -42,9 +44,10 @@ describe('migration (initPlan)', () => {
     expect(await initPlan()).toBe('ready');
     const after = await loadSettings();
     expect(after.plan).toMatchObject({ id: 'vik', weeklyTarget: 5 });
-    const { plan, ...rest } = after;
+    const { plan, userName, ...rest } = after;
     expect(plan).toBeDefined();
-    expect(rest).toEqual(before); // no other setting touched, userName stays undefined (greeting stays "Vik")
+    expect(userName).toBe('Vik'); // written explicitly, so a backup carries it
+    expect(rest).toEqual(before); // nothing else touched
     expect(currentPlan().sessions).toBe(TEMPLATES);
     expect(getActivePlan()?.id).toBe('vik');
   });
@@ -57,6 +60,33 @@ describe('migration (initPlan)', () => {
     await put('sets', { ...st(w, 'leg-press'), deleted: true });
     expect(await initPlan()).toBe('ready');
     expect((await loadSettings()).plan?.id).toBe('vik');
+  });
+
+  it.each([
+    ['a saved Sheet URL', { scriptUrl: 'https://script.google.com/macros/s/X/exec' }],
+    ['a saved Sheet key', { scriptKey: 'k' }],
+    ['saved swaps', { templateOverrides: { 'CB-A': { 'smith-flat-press': 'db-flat-press' } } }],
+    ['saved rest overrides', { restOverrides: { 'leg-press': 150 } }],
+    ['saved step overrides', { stepOverrides: { 'leg-press': 5 } }],
+  ])('%s alone proves an existing install: plan vik, name Vik, no setup', async (_n, patch) => {
+    await saveSettings({ ...DEFAULT_SETTINGS, ...patch });
+    expect(await initPlan()).toBe('ready');
+    const s = await loadSettings();
+    expect(s.plan?.id).toBe('vik');
+    expect(s.userName).toBe('Vik');
+  });
+
+  it('a custom exercise alone proves an existing install', async () => {
+    await put('customExercises', { id: 'custom-1', name: 'Hammer press', slot: 'Chest press', muscle: 'Chest', kind: 'compound', step: 5, repMin: 8, repMax: 10, restSec: 180 });
+    expect(await initPlan()).toBe('ready');
+    expect((await loadSettings()).plan?.id).toBe('vik');
+  });
+
+  it('a failed read rejects (the app shows a retry) and the next try can succeed', async () => {
+    const open = vi.spyOn(indexedDB, 'open').mockImplementation(() => { throw new Error('no storage'); });
+    await expect(initPlan()).rejects.toThrow();
+    open.mockRestore();
+    expect(await initPlan()).toBe('setup');
   });
 
   it('an empty install with no plan runs the setup and stores nothing', async () => {
@@ -132,6 +162,50 @@ describe('library and the suggested plan', () => {
     setActivePlan(fullBodyPlan([1, 3, 5]));
     expect(rangeFor('fb-a', 'machine-shoulder-press')).toEqual({ repMin: 8, repMax: 12 });
     expect(rangeFor('fb-a', 'cable-crunch')).toEqual({ repMin: 10, repMax: 15 });
+  });
+});
+
+describe('review fixes', () => {
+  it('arm swaps stay in their muscle: curls with curls, pushdowns with pushdowns', () => {
+    setActivePlan(fullBodyPlan([1, 3, 5]));
+    const ids = (id: string) => mergedSwapOptions(id, []).map((e) => e.id);
+    expect(ids('db-curl')).toContain('cable-curl');
+    expect(ids('db-curl')).not.toContain('bar-pushdown');
+    expect(ids('db-curl')).not.toContain('rope-pushdown');
+    expect(ids('bar-pushdown')).toContain('rope-pushdown');
+    expect(ids('bar-pushdown')).not.toContain('cable-curl');
+  });
+
+  it('bodyweight exercises: first set is 0 kg x the low end, reps progress, weight never goes up', () => {
+    const dead = exerciseById('dead-bug')!;
+    const range = { repMin: 10, repMax: 15 };
+    for (const id of ['dead-bug', 'push-up', 'back-extension']) expect(exerciseById(id)!.bodyweight, id).toBe(true);
+    expect(exerciseById('hanging-knee-raise')!.bodyweight).toBeUndefined(); // Vik's exercises stay as they were
+    expect(targetFor(dead, [], 1, '2026-11-12', range)).toEqual({ kg: 0, reps: 10 });
+    const done = (reps: number): SetLog => ({ ...st(wk('fb-b', 9), 'dead-bug'), kg: 0, reps });
+    expect(targetFor(dead, [done(12)], 1, '2026-11-12', range)).toEqual({ kg: 0, reps: 13 });
+    expect(targetFor(dead, [done(15)], 1, '2026-11-12', range)).toEqual({ kg: 0, reps: 15 });
+    expect(addWeightDue(dead, [done(15)], '2026-11-12', range)).toBe(false);
+  });
+
+  it('a custom exercise named like a new library one is hidden from the list', async () => {
+    await put('customExercises', { id: 'custom-hip', name: 'hip thrust', slot: 'Hinge', muscle: 'Hamstrings', kind: 'compound', step: 5, repMin: 8, repMax: 10, restSec: 180 });
+    await put('customExercises', { id: 'custom-other', name: 'Pec deck 2', slot: 'Chest fly', muscle: 'Chest', kind: 'isolation', step: 5, repMin: 8, repMax: 10, restSec: 120 });
+    const names = (await listExercises()).map((e) => e.name.toLowerCase());
+    expect(names.filter((n) => n === 'hip thrust')).toHaveLength(1);
+    expect(names).toContain('pec deck 2');
+  });
+
+  it('a backup carries the display name and restores it on a wiped phone', async () => {
+    await put('workouts', wk('CB-A', 9));
+    await saveSettings({ ...DEFAULT_SETTINGS, userName: 'Vik', plan: { id: 'vik', name: "Vik's split", sessions: [], days: [1, 2, 3, 4, 5, 6], weeklyTarget: 6 } });
+    const file = JSON.stringify(await exportAll());
+    await closeDb(true);
+    await restoreBackup(file);
+    const s = await loadSettings();
+    expect(s.userName).toBe('Vik');
+    expect(s.plan).toMatchObject({ id: 'vik', weeklyTarget: 6, days: [1, 2, 3, 4, 5, 6] });
+    expect(await initPlan()).toBe('ready');
   });
 });
 

@@ -15,14 +15,14 @@
    * First-run setup, and "Change plan" in Settings. firstRun: no back button on the first step and the greeting
    * name is cleared; otherwise the first step goes back to Settings.
    */
-  let { firstRun = true, onfinish, oncancel }: { firstRun?: boolean; onfinish: () => void; oncancel?: () => void } = $props();
+  let { firstRun = true, onfinish, oncancel, onrestore }: { firstRun?: boolean; onfinish: () => void; oncancel?: () => void; onrestore?: () => void } = $props();
 
   type Step = 'days' | 'plan' | 'build' | 'review';
   type Choice = 'fullbody' | 'vik' | 'custom';
   interface Draft { key: string; id: string; name: string; ids: string[] }
 
   const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
-  const COUNTS = [2, 3, 4, 5];
+  const COUNTS = [2, 3, 4, 5, 6, 7];
   const NOTE = 'Start light for the first 2 weeks — stop 2–3 reps before failure';
 
   // Changing the plan starts from the current number of days and weekdays.
@@ -30,7 +30,7 @@
   const prior = firstRun ? null : currentPlan();
   let step = $state<Step>('days');
   // svelte-ignore state_referenced_locally
-  let count = $state(prior ? Math.min(5, Math.max(2, prior.days.length)) : 3);
+  let count = $state(prior ? Math.min(7, Math.max(2, prior.days.length)) : 3);
   // svelte-ignore state_referenced_locally
   let days = $state<number[]>(prior && prior.days.length === count ? sortDays(prior.days) : defaultDays(count));
   // svelte-ignore state_referenced_locally
@@ -112,17 +112,20 @@
   // ---- the plan being set up ----
   const built = $derived.by<Plan>(() => {
     const sorted = sortDays(days);
+    // Same weekdays as the plan being replaced: keep its weekly target as it is now (never silently dropped).
+    const same = !!prior && prior.days.length === sorted.length && sortDays(prior.days).every((d, i) => d === sorted[i]);
+    const target = same ? (workout.settings?.weeklyTarget ?? prior.weeklyTarget) : sorted.length;
     if (choice === 'custom') {
       return {
         id: 'custom',
         name: 'My plan',
         sessions: drafts.map((d, i) => ({ id: d.id, name: label(d, i), items: d.ids.map((exerciseId) => ({ exerciseId, sets: 3 })) })),
         days: sorted,
-        weeklyTarget: sorted.length,
+        weeklyTarget: target,
       };
     }
-    if (choice === 'vik') return { id: 'vik', name: VIK_PLAN.name, sessions: [], days: sorted, weeklyTarget: sorted.length };
-    return fullBodyPlan(sorted);
+    if (choice === 'vik') return { id: 'vik', name: VIK_PLAN.name, sessions: [], days: sorted, weeklyTarget: target };
+    return { ...fullBodyPlan(sorted), weeklyTarget: target };
   });
   const schedule = $derived(built.sessions.length || built.id === 'vik' ? weekSchedule(resolvePlan(built)) : []);
   const takesTurns = $derived((resolvePlan(built).sessions.length > 1) && days.length % resolvePlan(built).sessions.length !== 0);
@@ -154,7 +157,6 @@
           plan,
           weeklyTarget: plan.weeklyTarget,
           retiredSessions: retired,
-          userName: firstRun ? '' : cur.userName,
         };
       });
       onfinish();
@@ -257,6 +259,9 @@
       <button class="go btn-primary press" type="button" disabled={saving} onclick={start}>Start</button>
     {:else}
       <button class="go btn-primary press" type="button" disabled={!canNext} onclick={next}>Continue</button>
+      {#if step === 'days' && firstRun && onrestore}
+        <button class="existing press" type="button" onclick={onrestore}>I already use this app: restore from backup or connect Sheet</button>
+      {/if}
     {/if}
   </footer>
 </section>
@@ -299,8 +304,8 @@
   .lead { margin: 0; color: var(--muted); font-size: 14.5px; }
   .hint { margin: 0; font-size: 13px; color: var(--muted); }
   .hint.warn { color: var(--amber); }
-  .counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-  .count { height: 64px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); font: 800 26px/1 var(--display); }
+  .counts { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .count { height: 56px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font: 800 22px/1 var(--display); }
   .count[aria-checked='true'] { background: var(--blue-deep); border-color: var(--blue); color: var(--blue-ink); }
   .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
   .day { height: 48px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -331,6 +336,7 @@
   .note { margin: 4px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--raised); font-size: 14px; }
   .foot { position: sticky; bottom: 0; padding: 12px 0 calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--ground) 30%); }
   .go { width: 100%; height: 56px; border-radius: 14px; font-size: 16px; }
+  .existing { display: block; width: 100%; min-height: 48px; margin-top: 4px; font-size: 13.5px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
   .go:disabled { opacity: 0.45; }
   details { border-top: 1px solid var(--line); }
   summary { display: flex; align-items: center; min-height: 48px; cursor: pointer; font-weight: 600; list-style: none; }

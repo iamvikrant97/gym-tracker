@@ -19,11 +19,19 @@ export async function initPlan(): Promise<PlanGate> {
     setActivePlan(resolvePlan(s.plan));
     return 'ready';
   }
-  const [sets, workouts] = await Promise.all([getAll('sets'), getAll('workouts')]);
-  if (sets.length === 0 && workouts.length === 0) return 'setup';
-  await updateSettings((cur) => (cur.plan ? cur : { ...cur, plan: vikPlanFor(cur) }));
+  const [sets, workouts, custom] = await Promise.all([getAll('sets'), getAll('workouts'), getAll('customExercises')]);
+  if (!hasData(s) && sets.length === 0 && workouts.length === 0 && custom.length === 0) return 'setup';
+  // The name is written down (not left to a default) so a backup carries it.
+  await updateSettings((cur) => (cur.plan ? cur : { ...cur, plan: vikPlanFor(cur), userName: cur.userName ?? 'Vik' }));
   setActivePlan(VIK_PLAN);
   return 'ready';
+}
+
+const has = (o: object | undefined) => !!o && Object.keys(o).length > 0;
+
+/** Settings that only an install in use has: a Sheet, saved swaps, rest or step changes. */
+function hasData(s: Settings): boolean {
+  return !!(s.scriptUrl || s.scriptKey) || has(s.templateOverrides) || has(s.restOverrides) || has(s.stepOverrides);
 }
 
 /** Vik's built-in plan as stored: no sessions (they come from the code), and his weekly target as it is. */
@@ -44,6 +52,8 @@ export function defaultDays(count: number): number[] {
     case 2: return [1, 4];
     case 3: return [1, 3, 5];
     case 4: return [1, 2, 4, 5];
+    case 6: return [1, 2, 3, 4, 5, 6];
+    case 7: return [1, 2, 3, 4, 5, 6, 0];
     default: return [1, 2, 3, 4, 5].slice(0, Math.max(1, Math.min(5, count)));
   }
 }

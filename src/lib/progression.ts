@@ -45,6 +45,12 @@ export function targetFor(
 ): { kg: number; reps: number } | null {
   const sessions = sessionsBefore(history, ex.id, beforeDate);
   const last = sessions[0];
+  if (ex.bodyweight) {
+    // Always 0 kg, so the first set is one tap; only the reps climb, up to the top of the range.
+    if (!last || last.length === 0) return { kg: 0, reps: range.repMin };
+    const prev = last.find((s) => s.setNo === setNo) ?? last[last.length - 1];
+    return { kg: 0, reps: Math.min(Math.max(prev.reps + 1, range.repMin), range.repMax) };
+  }
   if (!last || last.length === 0) return null;
 
   const prev = last.find((s) => s.setNo === setNo) ?? last[last.length - 1];
@@ -96,6 +102,7 @@ export function isPR(
 
 export function addWeightDue(ex: Exercise, history: SetLog[], today: string, range: RepRange = ex): boolean {
   const sessions = sessionsBefore(history, ex.id, today);
+  if (ex.bodyweight) return false;
   const last = sessions[0] ?? [];
   if (last.length === 0) return false;
   if (feltItHold(sessions)) return false;

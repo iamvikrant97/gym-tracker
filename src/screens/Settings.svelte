@@ -381,7 +381,7 @@
   <article class="card" aria-label="Training plan">
     <h2>Training plan</h2>
     <p class="status" data-testid="plan-name">{plan.name}</p>
-    <p class="hint" data-testid="plan-days">{daysLabel(plan.days)} · {plan.weeklyTarget} a week</p>
+    <p class="hint" data-testid="plan-days">{daysLabel(plan.days)} · {settings.weeklyTarget} a week</p>
     <ul class="plan-list">
       {#each plan.sessions as t (t.id)}<li>{t.name}<small>{t.items.length} exercises</small></li>{/each}
     </ul>

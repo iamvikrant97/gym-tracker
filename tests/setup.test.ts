@@ -77,7 +77,7 @@ describe('Setup: suggested plan', () => {
     expect(s.plan).toMatchObject({ id: 'fullbody', days: [1, 3, 5], weeklyTarget: 3 });
     expect(s.plan!.sessions.map((x) => x.id)).toEqual(['fb-a', 'fb-b']);
     expect(s.weeklyTarget).toBe(3);
-    expect(s.userName).toBe('');
+    expect(s.userName).toBeUndefined(); // never saves an empty name
     expect(currentPlan().id).toBe('fullbody');
   });
 
@@ -123,6 +123,62 @@ describe('Setup: suggested plan', () => {
     const s = await loadSettings();
     expect(s.plan).toEqual({ id: 'vik', name: "Vik's split", sessions: [], days: [1, 2, 4, 5], weeklyTarget: 4 });
     expect(currentPlan().sessions).toHaveLength(6);
+  });
+});
+
+describe('Setup: 2 to 7 days and keeping Vik\'s plan', () => {
+  it('offers 2 to 7 days; 6 is Mon-Sat, 7 is every day', async () => {
+    setup();
+    expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['2', '3', '4', '5', '6', '7']);
+    await click(radio('6'));
+    expect(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(pressed)).toEqual(Array(6).fill('true'));
+    expect(pressed('Sunday')).toBe('false');
+    await click(radio('7'));
+    expect(pressed('Sunday')).toBe('true');
+  });
+
+  const vikPlan = { id: 'vik', name: "Vik's split", sessions: [], days: [1, 2, 3, 4, 5, 6], weeklyTarget: 6 };
+
+  it("Change plan -> Vik's split keeps his 6 weekdays and weekly target of 6", async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, plan: vikPlan, weeklyTarget: 6, userName: 'Vik' });
+    await workout.restore();
+    const { onfinish } = setup({ firstRun: false });
+    expect(radio('6').getAttribute('aria-checked')).toBe('true');
+    expect(['Monday', 'Saturday'].map(pressed)).toEqual(['true', 'true']);
+    await next();
+    await click(radio(/Vik's split/));
+    await next();
+    await click(btn('Start'));
+    await waitFor(() => expect(onfinish).toHaveBeenCalled());
+    const s = await loadSettings();
+    expect(s.plan).toMatchObject({ id: 'vik', days: [1, 2, 3, 4, 5, 6], weeklyTarget: 6 });
+    expect(s.weeklyTarget).toBe(6);
+    expect(s.userName).toBe('Vik');
+  });
+
+  it('unchanged days keep a target set with the stepper (never silently dropped)', async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, plan: { ...vikPlan, weeklyTarget: 6 }, weeklyTarget: 5, userName: 'Vik' });
+    await workout.restore();
+    const { onfinish } = setup({ firstRun: false });
+    await next();
+    await click(radio(/Vik's split/));
+    await next();
+    await click(btn('Start'));
+    await waitFor(() => expect(onfinish).toHaveBeenCalled());
+    expect((await loadSettings()).weeklyTarget).toBe(5);
+  });
+
+  it('changing the days sets the target to the number of days', async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, plan: vikPlan, weeklyTarget: 6 });
+    await workout.restore();
+    const { onfinish } = setup({ firstRun: false });
+    await click(radio('4'));
+    await next();
+    await click(radio(/Vik's split/));
+    await next();
+    await click(btn('Start'));
+    await waitFor(() => expect(onfinish).toHaveBeenCalled());
+    expect((await loadSettings()).weeklyTarget).toBe(4);
   });
 });
 
@@ -323,7 +379,91 @@ describe('App: first run and migration', () => {
   });
 });
 
+describe('App: existing users and errors', () => {
+  const vikFile = () => {
+    const at = new Date(2026, 10, 9, 7, 0).getTime();
+    const body = {
+      app: 'gym-tracker', format: 1, exportedAt: '2026-11-10T00:00:00Z', customExercises: [],
+      workouts: [{ id: 'w1', date: '2026-11-09', sessionId: 'CB-A', startedAt: at, endedAt: at + 3_600_000, swaps: {} }],
+      sets: [{ id: 's1', workoutId: 'w1', date: '2026-11-09', sessionId: 'CB-A', exerciseId: 'smith-flat-press', setNo: 1, kg: 20, reps: 10, warmup: false, feltIt: false, doneAt: at, updatedAt: at, deleted: false, synced: true }],
+      settings: { ...DEFAULT_SETTINGS, userName: 'Vik', weeklyTarget: 6 },
+    };
+    const file = new File([JSON.stringify(body)], 'gym-backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => JSON.stringify(body) });
+    return file;
+  };
+
+  it('the first step has an exit for people who already use the app', async () => {
+    const { container } = render(App);
+    await click(await screen.findByRole('button', { name: /I already use this app/ }));
+    expect(await screen.findByRole('heading', { name: 'Restore your data' })).toBeTruthy();
+    expect(screen.getByLabelText('Backup file')).toBeTruthy();
+    expect(screen.getByLabelText('Web app URL')).toBeTruthy();
+    expect(container.querySelector('nav')).toBeNull();
+    await click(btn('Back'));
+    expect(await screen.findByRole('heading', { name: 'How many days a week?' })).toBeTruthy();
+  });
+
+  it('wiped phone -> restore a backup -> no setup, Home as Vik with his name', async () => {
+    render(App);
+    await click(await screen.findByRole('button', { name: /I already use this app/ }));
+    await fireEvent.change(await screen.findByLabelText('Backup file'), { target: { files: [vikFile()] } });
+    expect(await screen.findByRole('button', { name: 'Start workout' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/, Vik$/);
+    expect(screen.queryByRole('heading', { name: 'How many days a week?' })).toBeNull();
+    const s = await loadSettings();
+    expect(s.plan?.id).toBe('vik');
+    expect(s.userName).toBe('Vik');
+    expect(location.hash).toBe('#/');
+  });
+
+  it('a backup with no name (older file) still comes back as Vik', async () => {
+    const text = JSON.parse(await (vikFile() as unknown as { text(): Promise<string> }).text());
+    delete text.settings.userName;
+    const file = new File(['x'], 'old.json');
+    Object.defineProperty(file, 'text', { value: async () => JSON.stringify(text) });
+    render(App);
+    await click(await screen.findByRole('button', { name: /I already use this app/ }));
+    await fireEvent.change(await screen.findByLabelText('Backup file'), { target: { files: [file] } });
+    expect(await screen.findByRole('button', { name: 'Start workout' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/, Vik$/);
+  });
+
+  it('a backup with nothing in it stays on the restore screen and says so', async () => {
+    const empty = new File(['x'], 'e.json');
+    Object.defineProperty(empty, 'text', { value: async () => JSON.stringify({ app: 'gym-tracker', format: 1, sets: [], workouts: [], customExercises: [] }) });
+    render(App);
+    await click(await screen.findByRole('button', { name: /I already use this app/ }));
+    await fireEvent.change(await screen.findByLabelText('Backup file'), { target: { files: [empty] } });
+    expect(await screen.findByText(/nothing to restore/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Restore your data' })).toBeTruthy();
+  });
+
+  it('if the data cannot be read, an error with Try again is shown, never Vik\'s Home', async () => {
+    const open = vi.spyOn(indexedDB, 'open').mockImplementation(() => { throw new Error('no storage'); });
+    render(App);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByText(/Vik/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Start workout' })).toBeNull();
+    open.mockRestore();
+    await click(btn('Try again'));
+    expect(await screen.findByRole('heading', { name: 'How many days a week?' })).toBeTruthy();
+  });
+});
+
 describe('First time on an exercise', () => {
+  it('bodyweight: dead bug set 1 is one tap at 0 kg', async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, plan: fullBodyPlan([1, 3, 5]) });
+    await workout.restore();
+    await workout.startWorkout('fb-b', Date.now());
+    render(Workout);
+    const card = await screen.findByRole('article', { name: 'Dead bug' });
+    await click(within(card).getByRole('button', { name: 'Complete set 1' }));
+    await waitFor(() => expect(workout.sets.filter((s) => s.exerciseId === 'dead-bug')).toHaveLength(1));
+    expect(workout.sets.find((s) => s.exerciseId === 'dead-bug')).toMatchObject({ kg: 0, reps: 10 });
+    expect(screen.queryByRole('dialog', { name: /Dead bug/ })).toBeNull();
+  });
+
   it('the weight is blank: set 1 asks once, then sets 2 and 3 are one tap', async () => {
     await saveSettings({ ...DEFAULT_SETTINGS, plan: fullBodyPlan([1, 3, 5]), userName: '' });
     await workout.restore();
