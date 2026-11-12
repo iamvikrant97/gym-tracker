@@ -7,11 +7,12 @@
   } from '../lib/sync';
   import type { SyncState } from '../lib/sync';
   import { backupFileName, exportAll, restoreBackup } from '../lib/backup';
-  import { duplicateGroups, removeDuplicates } from '../lib/dedupe';
+  import { previewDuplicates, removeDuplicates } from '../lib/dedupe';
+  import type { DupPreview } from '../lib/dedupe';
   import type { SetLog } from '../lib/types';
   import { redirectUri, disconnect } from '../lib/spotify/auth';
   import { spotify } from '../lib/spotify/player.svelte';
-  import { workout, MAX_REST_SEC } from '../lib/workout.svelte';
+  import { workout, localDate, MAX_REST_SEC } from '../lib/workout.svelte';
   import { fmtClock, fmtKg } from '../lib/workoutView';
   import Sheet from '../ui/Sheet.svelte';
   import AddExerciseForm from '../ui/AddExerciseForm.svelte';
@@ -220,25 +221,36 @@
 
   // ---- duplicate sets ----
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  let dupes = $state<{ date: string; count: number }[] | null>(null);
-  const dupTotal = $derived(dupes?.reduce((n, d) => n + d.count, 0) ?? 0);
-  const dayLabel = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
+  let dupes = $state<DupPreview | null>(null);
+  let dupBusy = $state(false);
+  let dupError = $state('');
+  const dupTotal = $derived(dupes?.ids.length ?? 0);
+  const dayLabel = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
+  const exName = (id: string) => library.find((e) => e.id === id)?.name ?? workout.exercise(id)?.name ?? id;
+  /** Today and the open workout are never cleaned. Preview and Remove use the same scope. */
+  const dupScope = () => ({ today: localDate(Date.now()), openWorkoutId: workout.current?.id ?? null });
   async function findDupes() {
+    dupError = '';
     try {
-      dupes = duplicateGroups(await getAll<SetLog>('sets'));
+      dupes = previewDuplicates(await getAll<SetLog>('sets'), dupScope());
     } catch {
       dupes = null;
-      backupMsg = { text: 'Could not read the sets on this phone', bad: true };
+      dupError = 'Could not read the sets on this phone';
     }
   }
   async function confirmDupes() {
+    if (!dupes || dupBusy) return;
+    dupBusy = true;
+    dupError = '';
     try {
-      const n = await removeDuplicates();
+      const n = await removeDuplicates(dupes.ids, dupScope()); // exactly the previewed ids, re-checked
       dupes = null;
       await workout.refreshShared();
       showToast(`Removed ${n} duplicate set${n === 1 ? '' : 's'}`);
     } catch {
-      backupMsg = { text: 'Could not remove the duplicates. Nothing was lost', bad: true };
+      dupError = 'Could not remove the duplicates. Nothing was lost';
+    } finally {
+      dupBusy = false;
     }
   }
 
@@ -276,7 +288,10 @@
       const r = await restoreBackup(await file.text());
       await workout.refreshShared();
       await load();
-      backupMsg = { text: `Restored ${r.sets} set${r.sets === 1 ? '' : 's'}, ${r.workouts} workout${r.workouts === 1 ? '' : 's'}, ${r.exercises} exercise${r.exercises === 1 ? '' : 's'}`, bad: false };
+      backupMsg = {
+        text: `Restored ${r.sets} set${r.sets === 1 ? '' : 's'}, ${r.workouts} workout${r.workouts === 1 ? '' : 's'}, ${r.exercises} exercise${r.exercises === 1 ? '' : 's'}${r.skipped ? `, skipped ${r.skipped} duplicate${r.skipped === 1 ? '' : 's'}` : ''}`,
+        bad: false,
+      };
     } catch (err) {
       backupMsg = { text: err instanceof Error ? err.message : 'Could not read that file', bad: true };
     }
@@ -395,21 +410,26 @@
     {#if backupMsg}<p class="msg" class:bad={backupMsg.bad} role="status">{backupMsg.text}</p>{/if}
 
     <h3 class="sub">Duplicate sets</h3>
-    <p class="hint">If a day shows every set twice (a backup and the Sheet were both imported), this removes the extra copies. The Sheet rows are cleared too.</p>
-    <button class="secondary wide press" type="button" onclick={findDupes}>Find duplicate sets</button>
-    {#if dupes !== null}
-      {#if dupTotal === 0}
-        <p class="msg" role="status">No duplicate sets found</p>
-      {:else}
-        <ul class="dups">
-          {#each dupes as d (d.date)}<li>{dayLabel(d.date)}: {d.count} duplicate{d.count === 1 ? '' : 's'}</li>{/each}
-        </ul>
-        <div class="pair">
-          <button class="secondary press" type="button" onclick={() => (dupes = null)}>Cancel</button>
-          <button class="primary press" type="button" onclick={confirmDupes}>Remove {dupTotal} duplicate set{dupTotal === 1 ? '' : 's'}</button>
-        </div>
+    <p class="hint">If past days show every set twice (a backup and the Sheet were both imported), this removes the extra copy that came from the backup. Today and any open workout are never touched. The Sheet rows are cleared too.</p>
+    {#if dupError}<p class="msg bad" role="alert">{dupError}</p>{/if}
+    <button class="secondary wide press" type="button" onclick={findDupes} disabled={dupBusy}>Find duplicate sets</button>
+    <div data-testid="dup-result" aria-live="polite">
+      {#if dupes !== null}
+        {#if dupTotal === 0}
+          <p class="msg">No duplicate sets found</p>
+        {:else}
+          <ul class="dups">
+            {#each dupes.days as d (d.date)}
+              <li>{dayLabel(d.date)}: {d.count} duplicate{d.count === 1 ? '' : 's'}<small>{#each d.exerciseIds as id, i (id)}{i ? ', ' : ''}<span>{exName(id)}</span>{/each}</small></li>
+            {/each}
+          </ul>
+          <div class="pair">
+            <button class="secondary press" type="button" onclick={() => (dupes = null)} disabled={dupBusy}>Cancel</button>
+            <button class="primary press" type="button" onclick={confirmDupes} disabled={dupBusy}>Remove {dupTotal} duplicate set{dupTotal === 1 ? '' : 's'}</button>
+          </div>
+        {/if}
       {/if}
-    {/if}
+    </div>
   </article>
 
   <p class="about">Version {__APP_VERSION__} · built {__BUILD_DATE__}</p>
@@ -447,6 +467,7 @@
   .msg { margin: 0; font-size: 13px; color: var(--text); }
   .msg.bad { color: var(--amber); }
   .sub { margin: 8px 0 0; font: 600 14px/1.2 var(--body); }
+  .dups small { display: block; color: var(--muted); font-size: 12px; }
   .dups { margin: 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 4px; }
   .pair > .primary { width: auto; height: 48px; font-size: 14px; }
   .hint { margin: 0; font-size: 12.5px; color: var(--muted); }

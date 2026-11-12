@@ -34,7 +34,7 @@ export const backupFileName = (now: number = Date.now()) => {
   return `gym-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
 };
 
-export interface RestoreResult { sets: number; workouts: number; exercises: number }
+export interface RestoreResult { sets: number; workouts: number; exercises: number; /** new `import-` sets skipped because the Sheet's own copy is already here */ skipped: number }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
@@ -64,7 +64,7 @@ export async function restoreBackup(input: string | unknown): Promise<RestoreRes
 
   const db = await openDb();
   const tx = db.transaction(['sets', 'workouts', 'customExercises', 'queue'], 'readwrite');
-  const out: RestoreResult = { sets: 0, workouts: 0, exercises: 0 };
+  const out: RestoreResult = { sets: 0, workouts: 0, exercises: 0, skipped: 0 };
   const setStore = tx.objectStore('sets');
   const workoutStore = tx.objectStore('workouts');
   const exStore = tx.objectStore('customExercises');
@@ -82,25 +82,45 @@ export async function restoreBackup(input: string | unknown): Promise<RestoreRes
     names.add(e.name.trim().toLowerCase());
     out.exercises++;
   }
-  // A set whose content (date, exercise, set no., kg, reps, warm-up) is already here under another id is the same
-  // set (e.g. the Sheet was imported first): skip it, so restoring can never double a day.
-  const liveKeys = new Map<string, string>(); // content key -> id
-  for (const x of (await setStore.getAll()) as SetLog[]) if (!x.deleted) liveKeys.set(contentKey(x), x.id);
-  for (const s of sets) {
-    const cur = (await setStore.get(s.id)) as SetLog | undefined;
-    if (cur && cur.updatedAt >= s.updatedAt) continue;
-    if (!s.deleted) {
-      const key = contentKey(s);
-      const holder = liveKeys.get(key);
-      if (holder !== undefined && holder !== s.id) continue;
-      liveKeys.set(key, s.id);
-    }
+  // Guard against the backup + Sheet double import: a NEW `import-…` set whose content (date, exercise, set no., kg,
+  // reps) is already here as a live set under a Sheet id (not `import-…`) is the same set, so it is skipped and not
+  // queued. Ids already here are updates and are never skipped; warm-ups are never compared.
+  const sheetKeys = new Map<string, number>(); // content key -> live non-import sets here
+  const count = (x: SetLog, by: number) => {
+    if (x.deleted || x.warmup || x.setNo < 1 || x.id.startsWith('import-')) return;
+    const k = contentKey(x);
+    sheetKeys.set(k, (sheetKeys.get(k) ?? 0) + by);
+  };
+  for (const x of (await setStore.getAll()) as SetLog[]) count(x, 1);
+  const apply = async (s: SetLog) => {
     await setStore.put(s);
     if (!s.synced) {
       await queue.put({ id: s.id, op: s.deleted ? 'delete' : 'upsert' } satisfies QueueItem);
       queued = true;
     }
     if (!s.deleted) out.sets++;
+  };
+  // Pass 1: same-id copies (edits and deletions) first, keeping the key counts current as sets change.
+  const fresh: SetLog[] = [];
+  for (const s of sets) {
+    const cur = (await setStore.get(s.id)) as SetLog | undefined;
+    if (!cur) {
+      fresh.push(s);
+      continue;
+    }
+    if (cur.updatedAt >= s.updatedAt) continue;
+    count(cur, -1);
+    await apply(s);
+    count(s, 1);
+  }
+  // Pass 2: new ids.
+  for (const s of fresh) {
+    if (!s.deleted && !s.warmup && s.setNo > 0 && s.id.startsWith('import-') && (sheetKeys.get(contentKey(s)) ?? 0) > 0) {
+      out.skipped++;
+      continue;
+    }
+    await apply(s);
+    count(s, 1);
   }
   await tx.done;
 

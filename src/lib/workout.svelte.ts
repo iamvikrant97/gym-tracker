@@ -120,6 +120,11 @@ export class WorkoutStore {
     return this.#run(async () => {
       await this.#loadShared();
       await this.#loadHistory(this.current?.id ?? null);
+      // Sets of the open workout may have been removed or changed from outside (duplicate cleanup, restore).
+      if (this.current) {
+        const inDb = new Map((await getAll<SetLog>('sets')).filter((s) => s.workoutId === this.current!.id && live(s)).map((s) => [s.id, s]));
+        this.sets = this.sets.filter((s) => inDb.has(s.id)).map((s) => inDb.get(s.id)!);
+      }
       this.#recomputeRest();
     });
   }

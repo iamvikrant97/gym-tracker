@@ -43,7 +43,7 @@ describe('backup', () => {
 
     await closeDb(true);
     const r = await restoreBackup(json);
-    expect(r).toEqual({ sets: 2, workouts: 1, exercises: 1 });
+    expect(r).toEqual({ sets: 2, workouts: 1, exercises: 1, skipped: 0 });
     expect((await getAll<SetLog>('sets')).map((s) => s.id).sort()).toEqual(['a', 'b']);
     expect(await getAll<Workout>('workouts')).toEqual([W]);
     expect(await getAll<Exercise>('customExercises')).toEqual([CUSTOM]);
@@ -58,7 +58,7 @@ describe('backup', () => {
     await put('workouts', W);
     await put('sets', mk('a', { kg: 40, updatedAt: T0 }));
     const json = JSON.stringify(await exportAll());
-    expect(await restoreBackup(json)).toEqual({ sets: 0, workouts: 0, exercises: 0 });
+    expect(await restoreBackup(json)).toEqual({ sets: 0, workouts: 0, exercises: 0, skipped: 0 });
     await put('sets', mk('a', { kg: 45, updatedAt: T0 + 5 }));
     await restoreBackup(json); // older copy of a
     expect((await getAll<SetLog>('sets'))[0].kg).toBe(45);
@@ -169,36 +169,47 @@ describe('Settings screen', () => {
 });
 
 describe('Find duplicate sets', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date(2026, 10, 12, 9, 0)));
+  afterEach(() => vi.useRealTimers());
   const dup = (id: string, o: Partial<SetLog> = {}) => mk(id, { date: '2026-11-09', ...o });
+  const IMP1 = 'import-2026-11-09-converging-chest-press-1';
+  const IMP2 = 'import-2026-11-09-converging-chest-press-2';
   const seedDupes = async () => {
-    await put('sets', dup('import-2026-11-09-converging-chest-press-1', { synced: false }));
+    await put('sets', dup(IMP1, { synced: false }));
     await put('sets', dup('sheet-uuid-1'));
-    await put('sets', dup('import-2026-11-09-converging-chest-press-2', { setNo: 2, synced: false }));
+    await put('sets', dup(IMP2, { setNo: 2, synced: false }));
     await put('sets', dup('sheet-uuid-2', { setNo: 2 }));
     await put('sets', mk('today-1', { date: '2026-11-12' }));
+    await put('sets', mk('today-2', { date: '2026-11-12', id: 'import-today' }));
   };
 
-  it('lists the duplicates per day, removes them only after Confirm, then toasts the count', async () => {
+  it('lists the duplicates per day with year and exercise, removes them only after Confirm, then toasts the count', async () => {
     clearToast();
     await seedDupes();
     render(Settings);
     await fireEvent.click(await screen.findByRole('button', { name: 'Find duplicate sets' }));
-    expect(await screen.findByText('9 Nov: 2 duplicates')).toBeTruthy();
-    // Nothing is changed until the user confirms.
-    expect((await getAll<SetLog>('sets')).every((x) => !x.deleted)).toBe(true);
+    expect(await screen.findByText('9 Nov 2026: 2 duplicates')).toBeTruthy();
+    expect(screen.getByText('Converging chest press')).toBeTruthy();
+    expect((await getAll<SetLog>('sets')).every((x) => !x.deleted)).toBe(true); // nothing changed yet
     await fireEvent.click(screen.getByRole('button', { name: 'Remove 2 duplicate sets' }));
     await waitFor(() => expect(toasts.message).toBe('Removed 2 duplicate sets'));
     const sets = await getAll<SetLog>('sets');
-    expect(sets.filter((x) => x.deleted).map((x) => x.id).sort()).toEqual([
-      'import-2026-11-09-converging-chest-press-1', 'import-2026-11-09-converging-chest-press-2',
-    ]);
-    expect(sets.find((x) => x.id === 'today-1')?.deleted).toBe(false);
-    expect((await getAll<QueueItem>('queue')).map((q) => `${q.id}:${q.op}`).sort()).toEqual([
-      'import-2026-11-09-converging-chest-press-1:delete', 'import-2026-11-09-converging-chest-press-2:delete',
-    ]);
-    // Second run: nothing left.
+    expect(sets.filter((x) => x.deleted).map((x) => x.id).sort()).toEqual([IMP1, IMP2]);
+    expect(sets.filter((x) => x.date === '2026-11-12').every((x) => !x.deleted)).toBe(true);
+    expect((await getAll<QueueItem>('queue')).map((q) => `${q.id}:${q.op}`).sort()).toEqual([`${IMP1}:delete`, `${IMP2}:delete`]);
     await fireEvent.click(screen.getByRole('button', { name: 'Find duplicate sets' }));
     expect(await screen.findByText('No duplicate sets found')).toBeTruthy();
+  });
+
+  it('Remove is disabled while it runs, and the result area is a live region', async () => {
+    await seedDupes();
+    render(Settings);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Find duplicate sets' }));
+    const live = document.querySelector('[data-testid="dup-result"]');
+    expect(live?.getAttribute('aria-live')).toBe('polite');
+    const btn = await screen.findByRole('button', { name: 'Remove 2 duplicate sets' });
+    void fireEvent.click(btn);
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(true));
   });
 
   it('Cancel leaves everything as it was', async () => {
@@ -210,10 +221,22 @@ describe('Find duplicate sets', () => {
     expect((await getAll<SetLog>('sets')).every((x) => !x.deleted)).toBe(true);
   });
 
-  it('says so when there are none', async () => {
-    await put('sets', mk('a'));
+  it('says so when there are none (two Sheet copies are not duplicates)', async () => {
+    await put('sets', mk('a', { date: '2026-11-09' }));
+    await put('sets', mk('b', { date: '2026-11-09' }));
     render(Settings);
     await fireEvent.click(await screen.findByRole('button', { name: 'Find duplicate sets' }));
     expect(await screen.findByText('No duplicate sets found')).toBeTruthy();
+  });
+});
+
+describe('Import backup file message', () => {
+  it('says how many duplicates it skipped', async () => {
+    await put('sets', mk('sheet-1', { date: '2026-11-09' }));
+    const file = new File([JSON.stringify({ app: 'gym-tracker', format: 1, workouts: [], customExercises: [], sets: [mk('import-x', { date: '2026-11-09', synced: false })] })], 'b.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => JSON.stringify({ app: 'gym-tracker', format: 1, workouts: [], customExercises: [], sets: [mk('import-x', { date: '2026-11-09', synced: false })] }) });
+    render(Settings);
+    await fireEvent.change(await screen.findByLabelText('Backup file'), { target: { files: [file] } });
+    expect(await screen.findByText('Restored 0 sets, 0 workouts, 0 exercises, skipped 1 duplicate')).toBeTruthy();
   });
 });
