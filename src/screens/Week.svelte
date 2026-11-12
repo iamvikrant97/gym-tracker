@@ -56,7 +56,7 @@
         date,
         dom,
         label: `${dom} ${MONTHS[Number(date.slice(5, 7)) - 1]}`,
-        trained: trainedDays.has(date),
+        trained: trainedDays.has(date) && date <= today, // a future date with sets (typo, wrong clock) is not a trained day
         future: date > today,
         isToday: date === today,
       };
@@ -192,9 +192,10 @@
   .cal-title { font: 600 12px/1 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 28px 0 10px; }
   .cal-days, .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .cal-days { font-size: 11px; text-align: center; margin-bottom: 6px; }
-  .cell { display: grid; }
-  .day { aspect-ratio: 1; width: 100%; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--muted); font: 500 12px/1 var(--display); font-variant-numeric: tabular-nums; }
-  button.day { border: 0; padding: 0; min-width: 40px; min-height: 40px; cursor: pointer; }
+  .cell { display: grid; min-height: 48px; }
+  .day { height: 100%; width: 100%; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--muted); font: 500 12px/1 var(--display); font-variant-numeric: tabular-nums; }
+  button.day { border: 0; padding: 0; cursor: pointer; position: relative; }
+  button.day::before { content: ''; position: absolute; inset: 0 -2px; } /* hit area reaches 48 px wide as well */
   .day.on { background: var(--blue); color: var(--on-blue); font-weight: 700; }
   .day.today:not(.on) { outline: 1px solid var(--blue); outline-offset: -1px; color: var(--text); }
   .visit + .visit { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }

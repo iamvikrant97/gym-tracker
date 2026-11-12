@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  weekStart, weeklySets, setsPerWeek, daysSince, muscleTrend, homeNotes, workoutSummary,
+  weekStart, weeklySets, setsPerWeek, daysSince, muscleTrend, homeNotes, workoutSummary, dayVisits,
 } from '../src/lib/stats';
 import type { Exercise, SetLog, Settings, Workout } from '../src/lib/types';
 
@@ -253,5 +253,54 @@ describe('workoutSummary', () => {
   });
   it('flags no PR without history', () => {
     expect(workoutSummary(w, [mk(0, { kg: 45 })], 80).prs).toEqual([]);
+  });
+});
+
+describe('dayVisits', () => {
+  const D = '2026-11-09';
+  const wk = (id: string, o: Partial<Workout> = {}): Workout => workout(D, { id, endedAt: Date.parse(`${D}T07:00:00+05:30`) + 50 * 60_000, ...o });
+  const st = (id: string, workoutId: string, o: Partial<SetLog> = {}) => set(D, 'smith-flat-press', 60, 8, { id, workoutId, ...o });
+
+  it('merges two workouts of the same session and date into one visit', () => {
+    const t0 = Date.parse(`${D}T07:00:00+05:30`);
+    const ws = [wk('a', { endedAt: t0 + 30 * 60_000 }), wk('b', { startedAt: t0 + 5 * 3_600_000, endedAt: t0 + 5 * 3_600_000 + 20 * 60_000 })];
+    const v = dayVisits(D, ws, [st('1', 'a', { doneAt: t0 + 1 }), st('2', 'b', { doneAt: t0 + 5 * 3_600_000 + 1 })]);
+    expect(v).toHaveLength(1);
+    expect(v[0].name).toBe('Chest + Back A');
+    expect(v[0].sets).toBe(2);
+    expect(v[0].exercises).toHaveLength(1);
+    expect(v[0].minutes).toBe(5 * 60 + 20); // earliest start to latest end
+  });
+
+  it('puts sets without a workout record in a "Workout" visit', () => {
+    const v = dayVisits(D, [], [st('1', 'gone'), st('2', 'gone', { setNo: 2 })]);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toMatchObject({ name: 'Workout', sets: 2, minutes: null, volume: 960 });
+  });
+
+  it('hides the duration of an unfinished workout', () => {
+    const v = dayVisits(D, [wk('a', { endedAt: undefined })], [st('1', 'a')]);
+    expect(v[0].minutes).toBeNull();
+  });
+
+  it('shows the duration of a finished workout', () => {
+    expect(dayVisits(D, [wk('a')], [st('1', 'a')])[0].minutes).toBe(50);
+  });
+
+  it('hides the duration of imported workouts (their end time is made up: 1 min per set)', () => {
+    const t0 = Date.parse(`${D}T12:00:00`);
+    const imp = wk('import-2026-11-09-CB-A', { startedAt: t0, endedAt: t0 + 16 * 60_000 });
+    const v = dayVisits(D, [imp], [st('1', imp.id)]);
+    expect(v[0].minutes).toBeNull();
+    expect(v[0].sets).toBe(1);
+  });
+
+  it('keeps the duration when an import joined the app\'s own workout', () => {
+    expect(dayVisits(D, [wk('own-1')], [st('1', 'own-1')])[0].minutes).toBe(50);
+  });
+
+  it('leaves out warm-up and deleted sets, and a workout with only those', () => {
+    const v = dayVisits(D, [wk('a')], [st('1', 'a', { warmup: true }), st('2', 'a', { deleted: true })]);
+    expect(v).toEqual([]);
   });
 });

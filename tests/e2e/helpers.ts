@@ -52,14 +52,16 @@ export const queueLength = (page: Page) =>
   );
 
 
-/** Mocks the Apps Script bridge: GET -> empty log, POST -> acks every id. Returns the POST log. */
+/** Mocks the Apps Script bridge: POST action 'import' -> empty log, other POST -> acks every id. Returns the POST log. */
 export async function mockBridge(page: Page) {
   const posts: { contentType: string; upserts: { id: string; exercise: string; kg: number; reps: number }[]; deletes: string[] }[] = [];
   await page.route(`${SCRIPT}**`, async (route) => {
     const req = route.request();
     const headers = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
-    if (req.method() === 'POST') {
-      const body = JSON.parse(req.postData() ?? '{}');
+    const body = req.method() === 'POST' ? JSON.parse(req.postData() ?? '{}') : {};
+    if (body.action === 'import') {
+      await route.fulfill({ headers, body: JSON.stringify({ ok: true, log: [], exercises: [] }) });
+    } else if (req.method() === 'POST') {
       posts.push({ contentType: req.headers()['content-type'], upserts: body.upserts, deletes: body.deletes });
       const ids = body.upserts.map((u: { id: string }) => u.id);
       await route.fulfill({ headers, body: JSON.stringify({ ok: true, written: ids.length, acked: ids, skipped: [], deleted: body.deletes }) });

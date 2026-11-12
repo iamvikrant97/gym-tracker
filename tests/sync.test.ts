@@ -237,6 +237,13 @@ describe('importFromSheet', () => {
     }
   });
 
+  it('tells the user when the script is an old copy (answers an import with a write receipt, no log)', async () => {
+    const r = await importFromSheet(okFetch({ ok: true, written: 0, acked: [], skipped: [], deleted: [] }));
+    expect(r).toMatchObject({ ok: false, imported: 0 });
+    expect(r.error).toBe('Update your Apps Script to the latest version and redeploy');
+    expect(await sets()).toEqual([]);
+  });
+
   it('does not import when the bridge fails', async () => {
     expect(await importFromSheet(okFetch({ ok: false, error: 'bad key' }))).toMatchObject({ imported: 0 });
     expect(await sets()).toEqual([]);

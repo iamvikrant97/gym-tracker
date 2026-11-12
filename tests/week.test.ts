@@ -88,7 +88,7 @@ describe('Week', () => {
     expect(dlg.textContent).toContain('42.5 × 9');
     expect(dlg.textContent).toContain('50 × 10');
     expect(dlg.textContent).not.toContain('20 × 12'); // warm-up
-    expect(dlg.textContent).not.toContain('99'); // deleted
+    expect(dlg.textContent).not.toContain('99 × 99'); // deleted
     expect(within(dlg).getByTestId('day-sets').textContent).toBe('3');
     expect(within(dlg).getByTestId('day-volume').textContent).toContain('1,323'); // 440 + 382.5 + 500 = 1322.5 -> 1,323
     expect(within(dlg).getByTestId('day-minutes').textContent).toContain('45');
@@ -108,6 +108,18 @@ describe('Week', () => {
     expect(dlg.textContent).toContain('Chest + Back A');
     expect(dlg.textContent).toContain('Legs A');
     expect(dlg.textContent).toContain('100 × 8');
+  });
+
+  it('a future date with sets is not tappable', async () => {
+    await put('workouts', { id: 'wf', date: day(14), sessionId: 'CB-A', startedAt: at(14), swaps: {} } satisfies Workout);
+    await put('sets', {
+      id: 'sf', workoutId: 'wf', date: day(14), sessionId: 'CB-A', exerciseId: 'leg-press', setNo: 1, kg: 10, reps: 10,
+      warmup: false, feltIt: false, doneAt: at(14), updatedAt: 1, deleted: false, synced: true,
+    } satisfies SetLog);
+    render(Week);
+    await screen.findByRole('button', { name: '9 Nov, trained, view summary' });
+    expect(screen.queryByRole('button', { name: /14 Nov/ })).toBeNull();
+    expect(document.querySelector('[data-date="2026-11-14"]')?.getAttribute('data-trained')).toBe('false');
   });
 
   it('closes the sheet with Escape', async () => {

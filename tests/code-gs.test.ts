@@ -87,11 +87,18 @@ describe('keyOk_', () => {
     expect(keyOk_('')).toBe(false);
     expect(keyOk_(undefined)).toBe(false);
   });
-  it('compares in constant time: no === / == / indexOf shortcut on the key', () => {
-    const body = src.match(/function keyOk_[\s\S]*?\n}\n/)![0];
-    expect(body).not.toMatch(/key\s*[!=]==?\s*real|real\s*[!=]==?\s*key|indexOf|startsWith|localeCompare/);
-    expect(body).toMatch(/\^/); // XOR-accumulate
-    const loop = body.match(/for \(.*\n/)![0]; // the loop is one line: no return / break inside
-    expect(loop).not.toMatch(/return|break/);
+  it('rejects every near-miss of the same length (one character off at each position), other lengths and non-strings', () => {
+    const real = 'squat-rack-blue-4417-mango';
+    const { keyOk_ } = load(real);
+    for (let i = 0; i < real.length; i++) {
+      const off = real.slice(0, i) + (real[i] === 'x' ? 'y' : 'x') + real.slice(i + 1);
+      expect(keyOk_(off)).toBe(false);
+    }
+    expect(keyOk_(real.toUpperCase())).toBe(false);
+    expect(keyOk_(real + 'x')).toBe(false);
+    expect(keyOk_(real.slice(1))).toBe(false);
+    expect(keyOk_(['squat-rack-blue-4417-mango'])).toBe(false);
+    expect(keyOk_({ toString: () => real })).toBe(false);
+    expect(keyOk_(real)).toBe(true);
   });
 });

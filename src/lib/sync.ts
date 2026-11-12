@@ -3,6 +3,7 @@
 import { addCustomExercise, exerciseLookup, get, getAll, listExercises, loadSettings, openDb, put } from './db';
 import type { QueueItem } from './db';
 import { TEMPLATES } from './seed';
+import { IMPORT_ID_PREFIX } from './stats';
 import type { Exercise, Muscle, SessionId, SetLog, Workout } from './types';
 
 export const BATCH_SIZE = 50;
@@ -221,6 +222,10 @@ async function getSheet(fetchFn: typeof fetch, url: string, key: string): Promis
     if (data.error === 'bad key') return { ok: false, error: 'The key does not match the one in the script' };
     if (data.error === 'busy') return { ok: false, error: 'The Sheet is busy. Try again in a minute' };
     return { ok: false, error: scrub(`The script reported a problem: ${String(data.error ?? 'unknown')}`) };
+  }
+  // An old script treats {action:'import'} as an empty batch of sets and answers with a write receipt, no log.
+  if (data?.ok === true && !Array.isArray(data.log) && typeof (data as { written?: unknown }).written === 'number') {
+    return { ok: false, error: 'Update your Apps Script to the latest version and redeploy' };
   }
   if (!Array.isArray(data?.log)) return { ok: false, error: 'That URL did not answer like the script' };
   return { ok: true, data };
@@ -452,7 +457,7 @@ export async function importFromSheet(fetchFn: typeof fetch = (...a) => fetch(..
     // Join the app's own workout of that day and session if there is one, else a deterministic import workout.
     const own = existingWorkouts.find((w) => w.date === g.date && w.sessionId === sessionId);
     const startedAt = own?.startedAt ?? parseDate(g.date);
-    const workoutId = own?.id ?? `import-${g.date}-${sessionId}`;
+    const workoutId = own?.id ?? `${IMPORT_ID_PREFIX}${g.date}-${sessionId}`;
     if (!own) workoutsStore.put({ id: workoutId, date: g.date, sessionId, startedAt, endedAt: startedAt + g.rows.length * 60_000, swaps: {} } satisfies Workout);
     const counts = new Map<string, number>();
     g.rows.forEach((r, i) => {

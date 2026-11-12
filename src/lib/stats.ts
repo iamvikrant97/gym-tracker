@@ -178,6 +178,9 @@ export function workoutSummary(
   return { minutes, sets: mine.length, volume, prs, avgRestSec, workRatio, kcal };
 }
 
+/** Id prefix of workouts created by the Sheet import (their start/end times are synthetic). */
+export const IMPORT_ID_PREFIX = 'import-';
+
 export interface DayVisit {
   key: string;
   /** Session name (e.g. "Chest + Back B"); "Workout" when the record is missing. */
@@ -217,7 +220,9 @@ export function dayVisits(date: string, workouts: Workout[], sets: SetLog[], loo
     const merged = mergeVisit(w, dayWorkouts, daySets);
     const ids = new Set(dayWorkouts.filter((x) => visitKey(x) === vk).map((x) => x.id));
     const mine = merged.sets.filter((x) => ids.has(x.workoutId) || x.workoutId === w.id);
-    const minutes = merged.workout.endedAt === undefined ? null : Math.round(Math.max(0, merged.workout.endedAt - merged.workout.startedAt) / 60_000);
+    // Imported workouts get a made-up end (1 min per set, see sync.importFromSheet): show no duration for them.
+    const imported = dayWorkouts.filter((x) => visitKey(x) === vk).every((x) => x.id.startsWith(IMPORT_ID_PREFIX));
+    const minutes = imported || merged.workout.endedAt === undefined ? null : Math.round(Math.max(0, merged.workout.endedAt - merged.workout.startedAt) / 60_000);
     build(vk, TEMPLATES.find((t) => t.id === w.sessionId)?.name ?? 'Workout', minutes, mine);
   }
   const known = new Set(dayWorkouts.map((w) => w.id));

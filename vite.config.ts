@@ -4,6 +4,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { readFileSync } from 'node:fs';
+import { cspPlugin } from './vite-csp';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -16,6 +17,7 @@ export default defineConfig({
   plugins: [
     svelte(),
     svelteTesting(),
+    cspPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {

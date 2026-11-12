@@ -4,8 +4,9 @@ import { queueLength, seed, SCRIPT } from './helpers';
 const SHOTS = '.superpowers/sdd/2026-11-11-gym-app/shots';
 
 test('a full workout: start, log, reload mid-workout, swap in a new exercise, finish, progress', async ({ page }) => {
-  // The seeded history is 9-11 Nov 2026 and the flow expects "today" to be 11 Nov: pin Date (timers keep running).
-  await page.clock.setFixedTime(new Date('2026-11-11T09:00:00+05:30'));
+  // The seeded history is 9-11 Nov 2026 and the flow expects "today" to be 11 Nov: start the clock there, then let it run.
+  await page.clock.install({ time: new Date('2026-11-11T09:00:00+05:30') });
+  await page.clock.resume();
   const posts: { contentType: string; upserts: { id: string; exercise: string; kg: number; reps: number }[]; deletes: string[] }[] = [];
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -21,8 +22,10 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
   await page.route(`${SCRIPT}**`, async (route) => {
     const req = route.request();
     const headers = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
-    if (req.method() === 'POST') {
-      const body = JSON.parse(req.postData() ?? '{}');
+    const body = req.method() === 'POST' ? JSON.parse(req.postData() ?? '{}') : {};
+    if (body.action === 'import') {
+      await route.fulfill({ headers, body: JSON.stringify({ ok: true, log: [], exercises: [] }) });
+    } else if (req.method() === 'POST') {
       posts.push({ contentType: req.headers()['content-type'], upserts: body.upserts, deletes: body.deletes });
       const ids = body.upserts.map((u: { id: string }) => u.id);
       await route.fulfill({ headers, body: JSON.stringify({ ok: true, written: ids.length, acked: ids, skipped: [], deleted: body.deletes }) });
@@ -133,7 +136,7 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
         };
       }),
   );
-  expect(sent.map((u) => u.id)).toEqual(logged.sort((x, y) => x.doneAt - y.doneAt || x.setNo - y.setNo).map((x) => x.id));
+  expect(sent.map((u) => u.id)).toEqual(logged.sort((x, y) => x.doneAt - y.doneAt).map((x) => x.id));
   expect(logged.map((x) => x.setNo)).toEqual([1, 2]);
   expect(posts.flatMap((p) => p.deletes)).toEqual([]);
   expect(errors).toEqual([]);
