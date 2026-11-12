@@ -4,9 +4,20 @@ import { queueLength, seed, SCRIPT } from './helpers';
 const SHOTS = '.superpowers/sdd/2026-11-11-gym-app/shots';
 
 test('a full workout: start, log, reload mid-workout, swap in a new exercise, finish, progress', async ({ page }) => {
+  // The seeded history is 9-11 Nov 2026 and the flow expects "today" to be 11 Nov: pin Date (timers keep running).
+  await page.clock.setFixedTime(new Date('2026-11-11T09:00:00+05:30'));
   const posts: { contentType: string; upserts: { id: string; exercise: string; kg: number; reps: number }[]; deletes: string[] }[] = [];
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  // The built app ships a Content-Security-Policy: nothing in the flow may trip it.
+  const cspConsole: string[] = [];
+  page.on('console', (m) => /content security policy|refused to (load|connect|apply|execute|frame)/i.test(m.text()) && cspConsole.push(m.text()));
+  await page.addInitScript(() => {
+    (window as unknown as { __csp: string[] }).__csp = [];
+    document.addEventListener('securitypolicyviolation', (e) => {
+      (window as unknown as { __csp: string[] }).__csp.push(`${e.violatedDirective} ${e.blockedURI} ${e.sourceFile ?? ''}:${e.lineNumber}`);
+    });
+  });
   await page.route(`${SCRIPT}**`, async (route) => {
     const req = route.request();
     const headers = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
@@ -91,6 +102,15 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Week' }).click();
   await expect(page.getByText('4 / 6')).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/week.png` });
+  // Tap a trained day: its summary opens in a sheet.
+  await page.getByRole('button', { name: '9 Nov, trained, view summary' }).click();
+  const daySheet = page.getByRole('dialog', { name: '9 Nov' });
+  await expect(daySheet).toContainText('Chest + Back A');
+  await expect(daySheet).toContainText('Smith flat press');
+  await expect(daySheet).toContainText('40 × 10');
+  await page.keyboard.press('Escape');
+  await expect(daySheet).toBeHidden();
+  expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
   await page.goto('./#/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(page.getByText(`${new URL(page.url()).origin}/gym-tracker/`)).toBeVisible();
@@ -113,8 +133,14 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
         };
       }),
   );
-  expect(sent.map((u) => u.id)).toEqual(logged.sort((x, y) => x.doneAt - y.doneAt).map((x) => x.id));
+  expect(sent.map((u) => u.id)).toEqual(logged.sort((x, y) => x.doneAt - y.doneAt || x.setNo - y.setNo).map((x) => x.id));
   expect(logged.map((x) => x.setNo)).toEqual([1, 2]);
   expect(posts.flatMap((p) => p.deletes)).toEqual([]);
   expect(errors).toEqual([]);
+
+  // ---- CSP: the policy is really in the page, and no violation fired anywhere in the flow ----
+  await page.goto('./');
+  await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveCount(1);
+  expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
+  expect(cspConsole).toEqual([]);
 });
