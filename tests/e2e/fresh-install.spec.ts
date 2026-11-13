@@ -83,7 +83,8 @@ test('fresh install: setup -> Full body A -> first workout -> still set up after
 
   // ---- reload: no setup again; the plan and the history are there ----
   await page.goto('./');
-  await expect(page.getByRole('heading', { name: 'Full body B' })).toBeVisible(); // A is done: B is next
+  await expect(page.getByRole('button', { name: /^Done · Full body A/ })).toBeVisible(); // today is done
+  await expect(page.getByTestId('next-workout')).toContainText('Full body B'); // and B is next
   await expect(page.getByRole('heading', { name: 'How many days a week?' })).toHaveCount(0);
 
   // ---- Settings: the plan, the backup reminder, no Sheet noise ----

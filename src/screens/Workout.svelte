@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { workout, UNDO_MS } from '../lib/workout.svelte';
   import { exerciseById, rangeFor, sessionName, templateFor } from '../lib/seed';
   import { addWeightDue, isPR } from '../lib/progression';
@@ -9,6 +9,7 @@
   import SetRow, { type Field } from '../ui/SetRow.svelte';
   import AdjustSheet from '../ui/AdjustSheet.svelte';
   import SwapSheet from '../ui/SwapSheet.svelte';
+  import AddExtraSheet from '../ui/AddExtraSheet.svelte';
   import Sheet from '../ui/Sheet.svelte';
   import type { Exercise, Muscle, SetLog } from '../lib/types';
 
@@ -76,13 +77,16 @@
         };
       });
       const addWeight = !!(w && ex && !c.orphan && addWeightDue(ex, workout.history, w.date, range));
-      return { ...c, code: c.orphan ? '–' : String(i + 1), ex, range, step, restSec, rows, addWeight };
+      // Cards after the session's own exercises are added ones (today only, or kept in the session).
+      const extra = !c.orphan && i >= (template?.items.length ?? Infinity);
+      return { ...c, code: c.orphan ? '–' : String(i + 1), ex, range, step, restSec, rows, addWeight, extra };
     }),
   );
   type CardView = (typeof views)[number];
   type RowView = CardView['rows'][number];
 
   const usedIds = $derived(cards.filter((c) => !c.orphan).map((c) => c.exerciseId));
+  const sessionMuscles = $derived([...new Set(views.filter((v) => !v.orphan && !v.extra && v.ex).map((v) => v.ex!.muscle))]);
 
   // ---- header ----
   const elapsed = $derived(w ? fmtElapsed((w.endedAt ?? now) - w.startedAt) : '00:00');
@@ -267,6 +271,34 @@
     );
   }
 
+  // ---- add exercise ----
+  let addOpen = $state(false);
+  let flash = $state<string | null>(null);
+
+  function goTo(exerciseId: string) {
+    const el = document.querySelector<HTMLElement>(`[data-exid="${CSS.escape(exerciseId)}"]`);
+    el?.scrollIntoView?.({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
+    flash = exerciseId;
+    setTimeout(() => flash === exerciseId && (flash = null), 1400);
+  }
+
+  async function addPick(exerciseId: string, keep: boolean) {
+    addOpen = false;
+    if (usedIds.includes(exerciseId)) {
+      showToast('Already in this workout');
+      goTo(exerciseId);
+      return;
+    }
+    try {
+      await workout.addExtra(exerciseId, keep);
+      await tick();
+      goTo(exerciseId);
+    } catch (e) {
+      console.error(e);
+      showToast(e instanceof Error && /already/i.test(e.message) ? 'Already in this workout' : 'Could not add the exercise');
+    }
+  }
+
   async function finish() {
     try {
       if (workout.active) await workout.finish();
@@ -323,7 +355,7 @@
 
     <main class="list">
       {#each views as c (c.key)}
-        <article class="card" aria-label={c.ex?.name ?? c.exerciseId}>
+        <article class="card" class:flash={flash === c.exerciseId} data-exid={c.exerciseId} aria-label={c.ex?.name ?? c.exerciseId}>
           <div class="card-head">
             <span class="code">{c.code}</span>
             <div class="head-text">
@@ -332,8 +364,9 @@
               {#if c.addWeight}<div class="ex-note add">Add weight today: you hit the top of the range</div>{/if}
               {#if c.ex?.note}<div class="ex-note">{c.ex.note}</div>{/if}
               {#if c.orphan}<div class="ex-note">Logged before you swapped it out</div>{/if}
+              {#if c.extra}<div class="ex-note">{w?.extras?.includes(c.exerciseId) ? 'Added for today' : 'Kept in this session'}</div>{/if}
             </div>
-            {#if !c.orphan && workout.active}
+            {#if !c.orphan && !c.extra && workout.active}
               <button class="swap press" type="button" aria-label="Swap {c.ex?.name ?? 'exercise'}" onclick={() => openSwap(c)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" /></svg>Swap
               </button>
@@ -369,6 +402,7 @@
     </main>
 
     {#if workout.active}
+      <button class="addex press" type="button" onclick={() => (addOpen = true)}><span aria-hidden="true">+</span> Add exercise</button>
       <button class="finish press" class:ready={progress.total > 0 && progress.done >= progress.total} type="button" onclick={finish}>Finish workout</button>
       {#if workout.sets.length === 0}
         <button class="discard" type="button" onclick={discard}>Discard workout (no sets yet)</button>
@@ -413,6 +447,8 @@
   onpick={pick}
   onclose={() => (swapOpen = false)}
 />
+
+<AddExtraSheet open={addOpen} taken={usedIds} priority={sessionMuscles} onpick={addPick} onclose={() => (addOpen = false)} />
 
 <Sheet open={perArmOpen} onclose={() => ((perArmOpen = false), (perArmAsk = null))} title="Weight per arm" sub="For single-arm exercises, log the weight on one side, not both sides added together.">
   <button class="finish ready press" type="button" onclick={confirmPerArm}>Got it, log set</button>
@@ -461,6 +497,11 @@
     font: 500 11px/1 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em;
   }
   .shead span:nth-child(3), .shead span:nth-child(4) { text-align: center; }
+  .card.flash { border-color: var(--blue); transition: border-color 200ms var(--ease-out); }
+  .addex {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 48px; margin-top: 12px; border-radius: 14px;
+    border: 1px dashed var(--ring); color: var(--blue); font-weight: 600; font-size: 15px;
+  }
   .finish {
     display: block; width: 100%; height: 56px; margin-top: 24px; border-radius: 14px; background: var(--raised);
     font-weight: 600; color: var(--muted); transition: background 300ms var(--ease-out), color 300ms var(--ease-out);

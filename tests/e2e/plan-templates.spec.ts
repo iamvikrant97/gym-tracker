@@ -31,7 +31,8 @@ test('plan templates: Upper/Lower suggested for 4 days, switch to Push/Pull/Legs
   await expect(page).toHaveURL(/#\/summary$/);
 
   await page.goto('./');
-  await expect(page.getByRole('heading', { name: 'Lower A' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Done · Upper A/ })).toBeVisible();
+  await expect(page.getByTestId('next-workout')).toContainText('Lower A');
 
   // switch plans from Settings
   await page.goto('./#/settings');
@@ -43,7 +44,10 @@ test('plan templates: Upper/Lower suggested for 4 days, switch to Push/Pull/Legs
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('.sched li')).toHaveCount(6);
   await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByRole('heading', { name: 'Push A' })).toBeVisible();
+  // Today's Upper A is still done (it keeps its name); the new plan's first session is next.
+  await expect(page.getByRole('button', { name: /^Done · Upper A/ })).toBeVisible();
+  await expect(page.getByTestId('next-workout')).toContainText('Push A');
+
 
   // the Upper A workout and its set are still stored
   const kept = await page.evaluate(

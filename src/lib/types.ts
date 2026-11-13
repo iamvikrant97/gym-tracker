@@ -84,6 +84,8 @@ export interface Workout {
   rest?: { after: number; endsAt: number | null };
   /** Closed by the idle rule (not by Finish): it can be continued the same day. */
   autoEnded?: true;
+  /** Exercises added to this workout only ("Add exercise"), in the order added. Each has its own sets, next to the session's. */
+  extras?: string[];
 }
 
 export interface Settings {
@@ -101,6 +103,8 @@ export interface Settings {
   perArmConfirmed?: boolean;
   /** permanent swaps */
   templateOverrides: Partial<Record<SessionId, Record<string, string>>>;
+  /** Exercises added to a session for good ("Keep in this session from now on"), after the session's own exercises. */
+  templateExtras?: Partial<Record<SessionId, TemplateItem[]>>;
   /** The active training plan. Missing on a brand-new install (the setup flow runs). */
   plan?: Plan;
   /** Names of sessions from plans that were replaced, so old sets keep their label in the calendar and summary. */

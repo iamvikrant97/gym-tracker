@@ -68,3 +68,18 @@ export function weekSchedule(plan: Plan): { day: number; session: SessionTemplat
     return { day, session: plan.sessions.find((t) => t.id === id)! };
   });
 }
+
+/**
+ * The workout after the one just done: the session that comes next in the rotation (`workouts` must already include
+ * today's) and the next plan weekday after `weekday` (0 = Sunday), wrapping into next week. A rest weekday is simply
+ * never returned. `weekday` is null for a plan with no training days.
+ */
+export function nextPlannedWorkout(plan: Plan, workouts: Workout[], weekday: number): { weekday: number | null; session: SessionTemplate } {
+  const id = nextInPlan(plan, workouts);
+  const session = plan.sessions.find((t) => t.id === id)!;
+  for (let i = 1; i <= 7; i++) {
+    const d = (weekday + i) % 7;
+    if (plan.days.includes(d)) return { weekday: d, session };
+  }
+  return { weekday: null, session };
+}

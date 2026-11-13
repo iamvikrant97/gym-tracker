@@ -39,15 +39,17 @@ test('a full workout: start, log, reload mid-workout, swap in a new exercise, fi
   await expect(page.getByRole('heading', { name: 'How many days a week?' })).toBeVisible();
   await seed(page);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Chest + Back B' })).toBeVisible();
-  await expect(page.locator('.today .meta')).toHaveText('16 sets · about 70 min');
+  // The seed has Legs A done earlier today (11 Nov): Home says so, and the next session is a second one.
+  await expect(page.getByRole('button', { name: /^Done · Legs A/ })).toBeVisible();
+  await expect(page.getByTestId('next-workout')).toContainText('Thursday · Chest + Back B');
   await expect(page.locator('.sync')).toContainText('Synced');
   await page.waitForTimeout(500); // toast and sheets settled
   await page.screenshot({ path: `${SHOTS}/home.png`, fullPage: false });
 
   // A real click: fails if a closed sheet's scrim (or anything else) covers the button.
-  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('button', { name: 'Train another session today' }).click();
   await expect(page).toHaveURL(/#\/workout$/);
+  await expect(page.getByRole('heading', { name: 'Chest + Back B' })).toBeVisible();
 
   // ---- Workout: one tap per set ----
   const first = page.locator('article[aria-label="Converging chest press"]');

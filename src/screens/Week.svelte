@@ -4,8 +4,7 @@
   import { dayVisits, daysSince, visitKeysInWeek, weekStart, weeklySets } from '../lib/stats';
   import type { Exercise, Muscle, SetLog, Settings, Workout } from '../lib/types';
   import { localDate, workout } from '../lib/workout.svelte';
-  import { fmtKg } from '../lib/workoutView';
-  import Sheet from '../ui/Sheet.svelte';
+  import DaySummarySheet from '../ui/DaySummarySheet.svelte';
 
   // App passes syncStatus / syncWarn to every screen; this one has no sync indicator, so they are ignored.
 
@@ -73,7 +72,6 @@
   let shown = $state<string | null>(null); // kept while the sheet slides out, so its content does not vanish mid-animation
   const visits = $derived(shown ? dayVisits(shown, workouts, sets, lookup) : []);
   const pickedLabel = $derived(calendar.find((c) => c.date === shown)?.label ?? '');
-  const num = (n: number) => Math.round(n).toLocaleString('en-IN');
   function openDay(date: string) {
     shown = date;
     picked = date;
@@ -147,26 +145,7 @@
   </div>
 </section>
 
-<Sheet open={picked !== null} onclose={() => (picked = null)} title={pickedLabel} sub={visits.length > 1 ? `${visits.length} workouts` : undefined}>
-  {#each visits as v (v.key)}
-    <div class="visit" data-testid="day-workout">
-      <h3>{v.name}</h3>
-      <dl class="figs">
-        <div><dt>Volume</dt><dd><span data-testid="day-volume">{num(v.volume)}</span><small>kg</small></dd></div>
-        <div><dt>Sets</dt><dd data-testid="day-sets">{v.sets}</dd></div>
-        {#if v.minutes !== null}<div><dt>Time</dt><dd><span data-testid="day-minutes">{v.minutes}</span><small>min</small></dd></div>{/if}
-      </dl>
-      <ul class="exs">
-        {#each v.exercises as ex (ex.exerciseId)}
-          <li>
-            <span class="en">{ex.name}</span>
-            <span class="ss">{#each ex.sets as st (st.id)}<span>{fmtKg(st.kg)} × {st.reps}</span>{/each}</span>
-          </li>
-        {/each}
-      </ul>
-    </div>
-  {/each}
-</Sheet>
+<DaySummarySheet open={picked !== null} onclose={() => (picked = null)} title={pickedLabel} {visits} />
 
 <style>
   .lead { margin: 0 0 18px; font-size: 13px; }
@@ -198,16 +177,5 @@
   button.day::before { content: ''; position: absolute; inset: 0 -2px; } /* hit area reaches 48 px wide as well */
   .day.on { background: var(--blue); color: var(--on-blue); font-weight: 700; }
   .day.today:not(.on) { outline: 1px solid var(--blue); outline-offset: -1px; color: var(--text); }
-  .visit + .visit { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
-  .visit h3 { font: 700 16px/1.2 var(--body); margin: 0 0 10px; }
-  .figs { display: flex; gap: 10px; margin: 0 0 12px; }
-  .figs > div { flex: 1; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-  .figs dt { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
-  .figs dd { margin: 4px 0 0; font: 700 20px/1 var(--display); font-variant-numeric: tabular-nums; }
-  .figs small { font: 500 12px/1 var(--body); color: var(--muted); margin-left: 3px; }
-  .exs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .exs li { display: grid; gap: 4px; font-size: 14px; }
-  .en { font-weight: 600; }
-  .ss { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .day.future { opacity: 0.35; }
 </style>

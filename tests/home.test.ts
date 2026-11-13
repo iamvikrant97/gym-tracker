@@ -151,7 +151,9 @@ describe('Home', () => {
       } satisfies SetLog);
     }
     render(Home);
-    expect(await screen.findByText(/Today · session 5 of 6/)).toBeTruthy();
+    // Chest + Back B was finished today: Home says so (one visit, not two) instead of offering the next session.
+    const card = await screen.findByRole('button', { name: /Done · Chest \+ Back B/ });
+    expect(card.querySelector('[data-testid="done-sets"]')?.textContent).toBe('2');
     expect(screen.getByText(/sessions done this week/).closest('p')?.textContent).toContain('4 of 6');
   });
 

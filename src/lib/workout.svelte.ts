@@ -14,6 +14,8 @@ export const AUTO_END_MS = 60 * 60_000;
 export const RESUME_WINDOW_MS = 3 * 60 * 60_000;
 export const UNDO_MS = 5_000;
 export const MAX_REST_SEC = 300;
+/** Planned working sets of an exercise added with "Add exercise". */
+export const EXTRA_SETS = 3;
 const DEFAULT_REST_SEC = 120;
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -154,12 +156,12 @@ export class WorkoutStore {
   // ---- lifecycle ----------------------------------------------------------------------
 
   /** Closes anything still open by the auto-end rule, then opens a new workout. Caller holds the lock. */
-  async #begin(sessionId: SessionId, now: number, swaps: Record<string, string> = {}): Promise<Workout> {
+  async #begin(sessionId: SessionId, now: number, swaps: Record<string, string> = {}, extras: string[] = []): Promise<Workout> {
     for (const w of (await getAll<Workout>('workouts')).filter((x) => x.endedAt === undefined)) {
       const sets = await getAllFromIndex<SetLog>('sets', 'workoutId', w.id);
       await this.#endWorkout(w, Math.min(now, WorkoutStore.lastActivity(w, sets) + AUTO_END_MS), true);
     }
-    const w: Workout = { id: crypto.randomUUID(), date: localDate(now), sessionId, startedAt: now, swaps: { ...swaps } };
+    const w: Workout = { id: crypto.randomUUID(), date: localDate(now), sessionId, startedAt: now, swaps: { ...swaps }, ...(extras.length ? { extras: [...extras] } : {}) };
     await put('workouts', w);
     this.current = w;
     this.sets = [];
@@ -186,7 +188,7 @@ export class WorkoutStore {
       const last = all[0];
       if (!last) throw new Error('No workout to repeat yet');
       await this.#loadShared();
-      return this.#begin(last.sessionId, now, last.swaps);
+      return this.#begin(last.sessionId, now, last.swaps, last.extras);
     });
   }
 
@@ -334,13 +336,12 @@ export class WorkoutStore {
     const tpl = templateFor(w.sessionId);
     if (!tpl) return [];
     const out: PlannedSet[] = [];
-    for (const item of tpl.items) {
-      const exerciseId = this.#effectiveId(w.sessionId, item.exerciseId);
+    const add = (exerciseId: string, sets: number) => {
       const ex = this.exercise(exerciseId);
       // Custom exercises have no per-session range: use their own.
       const range = exerciseById(exerciseId) ? rangeFor(w.sessionId, exerciseId) : ex ? { repMin: ex.repMin, repMax: ex.repMax } : undefined;
       const lastSets = lastSessionSets(this.history, exerciseId, w.date);
-      for (let setNo = 1; setNo <= item.sets; setNo++) {
+      for (let setNo = 1; setNo <= sets; setNo++) {
         out.push({
           exerciseId,
           setNo,
@@ -348,6 +349,18 @@ export class WorkoutStore {
           last: lastSets.find((s) => s.setNo === setNo) ?? null,
         });
       }
+    };
+    for (const item of tpl.items) add(this.#effectiveId(w.sessionId, item.exerciseId), item.sets);
+    // Added exercises come after the session's own, kept ones first. One already in the session is never doubled.
+    const have = new Set(out.map((p) => p.exerciseId));
+    const extras = [
+      ...(this.settings?.templateExtras?.[w.sessionId] ?? []),
+      ...(w.extras ?? []).map((exerciseId) => ({ exerciseId, sets: EXTRA_SETS })),
+    ];
+    for (const item of extras) {
+      if (have.has(item.exerciseId)) continue;
+      have.add(item.exerciseId);
+      add(item.exerciseId, item.sets);
     }
     return out;
   }
@@ -375,7 +388,7 @@ export class WorkoutStore {
       w = this.current!;
       if (w.endedAt !== undefined) {
         if (WorkoutStore.#continuable(w, now)) w = await this.#reopen(w);
-        else if (w.autoEnded) w = await this.#begin(w.sessionId, now, w.swaps);
+        else if (w.autoEnded) w = await this.#begin(w.sessionId, now, w.swaps, w.extras);
         else throw new Error('This workout is finished');
       }
       const existing = this.sets.find((s) => s.exerciseId === exerciseId && s.setNo === setNo && !s.warmup);
@@ -468,6 +481,33 @@ export class WorkoutStore {
           else this.history = [...this.history, back];
           this.#recomputeRest();
         });
+    });
+  }
+
+  // ---- extras -------------------------------------------------------------------------
+
+  /**
+   * Adds an exercise to this workout on top of the session's own (unlike swap, nothing is replaced). It gets EXTRA_SETS
+   * planned sets. With `permanent` it is stored on the session in the settings, so every later workout of it has it too;
+   * otherwise only today's workout does. Throws when the exercise is already in the workout.
+   */
+  addExtra(exerciseId: string, permanent: boolean): Promise<void> {
+    return this.#run(async () => {
+      const w = this.current;
+      if (!w) throw new Error('No workout');
+      if (!this.exercise(exerciseId)) throw new Error('Unknown exercise');
+      if (this.plannedSets().some((p) => p.exerciseId === exerciseId)) throw new Error('Already in this workout');
+      if (permanent) {
+        this.settings = await updateSettings((settings) => {
+          const mine = settings.templateExtras?.[w.sessionId] ?? [];
+          if (mine.some((i) => i.exerciseId === exerciseId)) return settings;
+          return { ...settings, templateExtras: { ...settings.templateExtras, [w.sessionId]: [...mine, { exerciseId, sets: EXTRA_SETS }] } };
+        });
+        return;
+      }
+      const updated: Workout = { ...w, extras: [...(w.extras ?? []), exerciseId] };
+      await put('workouts', updated);
+      this.current = updated;
     });
   }
 

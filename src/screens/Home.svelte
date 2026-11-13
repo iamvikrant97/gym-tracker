@@ -2,15 +2,16 @@
   import { getAll, loadSettings, DEFAULT_SETTINGS } from '../lib/db';
   import { greetingFor } from '../lib/greeting';
   import { currentPlan, exerciseById, templateFor } from '../lib/seed';
-  import { homeNotes, visitKey, visitKeysInWeek } from '../lib/stats';
+  import { dayVisits, homeNotes, visitKey, visitKeysInWeek } from '../lib/stats';
   import { showToast } from '../ui/toast.svelte';
   import { onMount } from 'svelte';
-  import { nextInPlan } from '../lib/selection';
+  import { nextInPlan, nextPlannedWorkout } from '../lib/selection';
   import { planHintDue, trainingDayNote } from '../lib/planSetup';
-  import { workout, localDate } from '../lib/workout.svelte';
+  import { workout, localDate, EXTRA_SETS } from '../lib/workout.svelte';
   import { estimateMinutes } from '../lib/workoutView';
   import type { SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
   import Sheet from '../ui/Sheet.svelte';
+  import DaySummarySheet from '../ui/DaySummarySheet.svelte';
 
   let { syncStatus = 'Saved on phone', syncWarn = false }: { syncStatus?: string; syncWarn?: boolean } = $props();
 
@@ -19,6 +20,7 @@
   let settings = $state.raw<Settings>(workout.settings ?? DEFAULT_SETTINGS);
   let picked = $state<SessionId | null>(null);
   let swapOpen = $state(false);
+  let summaryOpen = $state(false);
 
   // The app can sit open (or in the background) overnight: re-read the clock when it comes back and every minute.
   let now = $state(Date.now());
@@ -91,18 +93,39 @@
   function describe(t: SessionTemplate) {
     let setCount = 0;
     const rests: number[] = [];
-    const items = t.items.map((item) => {
-      const id = effectiveId(t, item.exerciseId);
+    const line = (id: string, sets: number) => {
       const ex = exerciseById(id) ?? workout.exercise(id);
       const rest = Math.min(settings.restOverrides[id] ?? ex?.restSec ?? 120, 300);
-      setCount += item.sets;
-      for (let i = 0; i < item.sets; i++) rests.push(rest);
-      return { id, name: ex?.name ?? id, sets: item.sets };
-    });
+      setCount += sets;
+      for (let i = 0; i < sets; i++) rests.push(rest);
+      return { id, name: ex?.name ?? id, sets };
+    };
+    const items = t.items.map((item) => line(effectiveId(t, item.exerciseId), item.sets));
+    // Exercises added to the session: kept ones, and today's when this is the running workout.
+    const added = [
+      ...(settings.templateExtras?.[t.id] ?? []),
+      ...(following && workout.current?.sessionId === t.id ? (workout.current.extras ?? []).map((exerciseId) => ({ exerciseId, sets: EXTRA_SETS })) : []),
+    ];
+    for (const a of added) if (!items.some((i) => i.id === a.exerciseId)) items.push(line(a.exerciseId, a.sets));
     return { items, setCount, minutes: estimateMinutes(rests) };
   }
 
   const plan = $derived(describe(template));
+
+  // Today is done: a workout with working sets was finished today (not running, and not one to carry on with).
+  const todayVisits = $derived(dayVisits(today, workouts, sets, (id) => exerciseById(id) ?? workout.exercise(id)));
+  const done = $derived(!following && todayVisits.length > 0);
+  // Several workouts today (a second session): the card is about the latest, and says how many there were.
+  const lastVisit = $derived(todayVisits.at(-1) ?? null);
+  const doneName = $derived(lastVisit?.name ?? '');
+  const doneSets = $derived(lastVisit?.sets ?? 0);
+  const doneVolume = $derived(lastVisit?.volume ?? 0);
+  // Imported workouts have no real duration (the day summary hides it too): minutes is null for them.
+  const doneMinutes = $derived(lastVisit?.minutes ?? null);
+  const num = (n: number) => Math.round(n).toLocaleString('en-IN');
+  const next = $derived(done ? nextPlannedWorkout(planNow, counted, d.getDay()) : null);
+  const nextLabel = $derived(next ? (next.weekday === null ? next.session.name : `${DAYS[next.weekday]} · ${next.session.name}`) : '');
+  const summaryTitle = $derived(`${d.getDate()} ${MONTHS[d.getMonth()]}`);
   // Visits (date + session), so a long break that split one visit into two workouts still counts once.
   const visits = $derived(visitKeysInWeek(workouts, sets, today));
   const sessionNo = $derived(
@@ -182,22 +205,44 @@
 
   <h1 class="greet">{greeting}</h1>
 
-  <article class="today">
-    <div class="lbl">Today · session {sessionNo} of {settings.weeklyTarget}</div>
-    <h2>{template.name}</h2>
-    <div class="meta">{plan.setCount} sets · about {plan.minutes} min</div>
-    <ol class="ex-list">
-      {#each plan.items as item, i (i)}
-        <li><b>{i + 1}</b><span>{item.name}</span><span>{item.sets} sets</span></li>
-      {/each}
-    </ol>
-    <button class="start btn-primary press" type="button" disabled={!workout.ready || starting} onclick={start}>{resuming ? 'Resume workout' : continuing ? 'Continue workout' : 'Start workout'}</button>
-    {#if !resuming}
-      <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Swap day</button>
-    {:else if resumingEmpty}
-      <button class="swapday" type="button" onclick={discard}>Discard workout (no sets yet)</button>
-    {/if}
-  </article>
+  {#if done}
+    <button class="today donecard press" type="button" aria-label="Done · {doneName}, view summary" onclick={() => (summaryOpen = true)}>
+      <span class="lbl">Today</span>
+      <span class="dname">Done · {doneName}</span>
+      {#if todayVisits.length > 1}<span class="more">{todayVisits.length} workouts today · tap for all</span>{/if}
+      <span class="figs">
+        <span class="fig"><span class="k">Volume</span><span class="v"><span data-testid="done-volume">{num(doneVolume)}</span><small>kg</small></span></span>
+        <span class="fig"><span class="k">Sets</span><span class="v" data-testid="done-sets">{doneSets}</span></span>
+        {#if doneMinutes !== null}<span class="fig"><span class="k">Time</span><span class="v"><span data-testid="done-minutes">{doneMinutes}</span><small>min</small></span></span>{/if}
+      </span>
+    </button>
+    <div class="next" data-testid="next-workout">
+      <span class="lbl">Next workout</span>
+      <b>{nextLabel}</b>
+    </div>
+    <button class="another press" type="button" aria-label="Train another session today" disabled={!workout.ready || starting} onclick={start}>
+      Train another session today<small>{template.name}</small>
+    </button>
+    <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Choose a different session</button>
+  {:else}
+    <article class="today">
+      <div class="lbl">Today · session {sessionNo} of {settings.weeklyTarget}</div>
+      <h2>{template.name}</h2>
+      <div class="meta">{plan.setCount} sets · about {plan.minutes} min</div>
+      <ol class="ex-list">
+        {#each plan.items as item, i (i)}
+          <li><b>{i + 1}</b><span>{item.name}</span><span>{item.sets} sets</span></li>
+        {/each}
+      </ol>
+      <button class="start btn-primary press" type="button" disabled={!workout.ready || starting} onclick={start}>{resuming ? 'Resume workout' : continuing ? 'Continue workout' : 'Start workout'}</button>
+      {#if !resuming}
+        <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Swap day</button>
+      {:else if resumingEmpty}
+        <button class="swapday" type="button" onclick={discard}>Discard workout (no sets yet)</button>
+      {/if}
+    </article>
+
+  {/if}
 
   <div class="notes">
     {#each notes as line (line)}
@@ -214,6 +259,8 @@
     </aside>
   {/if}
 </section>
+
+<DaySummarySheet open={summaryOpen} onclose={() => (summaryOpen = false)} title={summaryTitle} visits={todayVisits} />
 
 <Sheet open={swapOpen} onclose={() => (swapOpen = false)} title="Swap day" sub={swapSub}>
   <div role="radiogroup" aria-label="Session">
@@ -250,6 +297,20 @@
   .start { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border-radius: 14px; background: var(--blue); color: var(--on-blue); font-weight: 600; font-size: 16px; transition: transform 160ms var(--ease-out), opacity 160ms; }
   .start:disabled { opacity: 0.6; }
   .swapday { display: block; margin: 12px auto 0; min-height: 48px; padding: 0 16px; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .donecard { display: block; width: 100%; text-align: left; color: inherit; font: inherit; }
+  .donecard .lbl { display: block; }
+  .dname { display: block; font: 800 28px/1.1 var(--body); letter-spacing: -0.02em; margin: 8px 0 14px; }
+  .more { display: block; margin: -8px 0 12px; font-size: 13px; color: var(--muted); }
+  .figs { display: flex; gap: 10px; }
+  .fig { flex: 1; display: grid; gap: 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .fig .k { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .fig .v { font: 700 20px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .fig small { font: 500 12px/1 var(--body); color: var(--muted); margin-left: 3px; }
+  .next { margin-top: 12px; min-height: 56px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  .next b { font: 600 16px/1.2 var(--body); }
+  .another { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 56px; margin-top: 12px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); font-weight: 600; font-size: 15px; }
+  .another small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .another:disabled { opacity: 0.6; }
   .notes { margin-top: 18px; display: grid; gap: 8px; }
   .notes p { margin: 0; display: flex; gap: 10px; align-items: baseline; font-size: 13.5px; color: var(--muted); }
   .notes p::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #3a404c; transform: translateY(-1px); }
