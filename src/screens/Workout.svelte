@@ -275,6 +275,22 @@
   let addOpen = $state(false);
   let flash = $state<string | null>(null);
 
+  async function addSet(c: CardView) {
+    try {
+      await workout.addSet(c.exerciseId);
+    } catch (e) {
+      console.error(e);
+      showToast('Could not add a set');
+    }
+  }
+  async function removeSet(c: CardView) {
+    try {
+      await workout.removeAddedSet(c.exerciseId);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   function goTo(exerciseId: string) {
     const el = document.querySelector<HTMLElement>(`[data-exid="${CSS.escape(exerciseId)}"]`);
     el?.scrollIntoView?.({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
@@ -366,10 +382,18 @@
               {#if c.orphan}<div class="ex-note">Logged before you swapped it out</div>{/if}
               {#if c.extra}<div class="ex-note">{w?.extras?.includes(c.exerciseId) ? 'Added for today' : 'Kept in this session'}</div>{/if}
             </div>
-            {#if !c.orphan && !c.extra && workout.active}
-              <button class="swap press" type="button" aria-label="Swap {c.ex?.name ?? 'exercise'}" onclick={() => openSwap(c)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" /></svg>Swap
-              </button>
+            {#if !c.orphan && workout.active}
+              <div class="head-actions">
+                {#if (w?.extraSets?.[c.exerciseId] ?? 0) > 0 && !c.rows[c.rows.length - 1]?.done}
+                  <button class="swap press iconbtn" type="button" aria-label="Remove the added set from {c.ex?.name ?? 'exercise'}" onclick={() => removeSet(c)}>−</button>
+                {/if}
+                <button class="swap press iconbtn" type="button" aria-label="Add a set to {c.ex?.name ?? 'exercise'}" onclick={() => addSet(c)}>+</button>
+                {#if !c.extra}
+                  <button class="swap press" type="button" aria-label="Swap {c.ex?.name ?? 'exercise'}" onclick={() => openSwap(c)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" /></svg>Swap
+                  </button>
+                {/if}
+              </div>
             {/if}
           </div>
           <div class="sets">
@@ -486,10 +510,12 @@
   .ex-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .ex-note { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
   .ex-note.add { color: var(--blue); }
+  .head-actions { margin-left: auto; display: flex; gap: 6px; flex: none; margin-top: -6px; margin-right: -6px; }
   .swap {
-    margin-left: auto; flex: none; height: 48px; margin-top: -6px; margin-right: -6px; padding: 0 12px; border-radius: 10px;
+    flex: none; height: 48px; padding: 0 12px; border-radius: 10px;
     background: var(--raised); font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center;
   }
+  .iconbtn { min-width: 48px; justify-content: center; font-size: 22px; line-height: 1; color: var(--text, inherit); }
   .swap svg { width: 14px; height: 14px; }
   .sets { margin-top: 10px; font-variant-numeric: tabular-nums; }
   .shead {

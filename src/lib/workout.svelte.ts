@@ -341,7 +341,8 @@ export class WorkoutStore {
       // Custom exercises have no per-session range: use their own.
       const range = exerciseById(exerciseId) ? rangeFor(w.sessionId, exerciseId) : ex ? { repMin: ex.repMin, repMax: ex.repMax } : undefined;
       const lastSets = lastSessionSets(this.history, exerciseId, w.date);
-      for (let setNo = 1; setNo <= sets; setNo++) {
+      const total = sets + (w.extraSets?.[exerciseId] ?? 0);
+      for (let setNo = 1; setNo <= total; setNo++) {
         out.push({
           exerciseId,
           setNo,
@@ -506,6 +507,38 @@ export class WorkoutStore {
         return;
       }
       const updated: Workout = { ...w, extras: [...(w.extras ?? []), exerciseId] };
+      await put('workouts', updated);
+      this.current = updated;
+    });
+  }
+
+  // ---- extra sets ---------------------------------------------------------------------
+
+  /** Adds one more working set to an exercise in this workout only (the plan is untouched). */
+  addSet(exerciseId: string): Promise<void> {
+    return this.#run(async () => {
+      const w = this.current;
+      if (!w) throw new Error('No workout');
+      if (!this.plannedSets().some((p) => p.exerciseId === exerciseId)) throw new Error('Not in this workout');
+      const n = (w.extraSets?.[exerciseId] ?? 0) + 1;
+      const updated: Workout = { ...w, extraSets: { ...w.extraSets, [exerciseId]: Math.min(n, 10) } };
+      await put('workouts', updated);
+      this.current = updated;
+    });
+  }
+
+  /** Takes back the last added set, but only while it is still empty (a logged set is removed with its own delete). */
+  removeAddedSet(exerciseId: string): Promise<void> {
+    return this.#run(async () => {
+      const w = this.current;
+      const n = w?.extraSets?.[exerciseId] ?? 0;
+      if (!w || n < 1) return;
+      const last = this.plannedSets().filter((p) => p.exerciseId === exerciseId).length;
+      if (this.sets.some((s) => !s.deleted && !s.warmup && s.exerciseId === exerciseId && s.setNo >= last)) return;
+      const extraSets = { ...w.extraSets };
+      if (n === 1) delete extraSets[exerciseId];
+      else extraSets[exerciseId] = n - 1;
+      const updated: Workout = { ...w, extraSets };
       await put('workouts', updated);
       this.current = updated;
     });

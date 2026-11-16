@@ -86,6 +86,8 @@ export interface Workout {
   autoEnded?: true;
   /** Exercises added to this workout only ("Add exercise"), in the order added. Each has its own sets, next to the session's. */
   extras?: string[];
+  /** Extra working sets added to an exercise in this workout only (the + button), by exercise id. */
+  extraSets?: Record<string, number>;
 }
 
 export interface Settings {
