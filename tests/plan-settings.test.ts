@@ -33,7 +33,7 @@ describe('Settings: Training plan', () => {
     const card = await screen.findByRole('article', { name: 'Training plan' });
     expect(within(card).getByTestId('plan-name').textContent).toBe('Full body A/B');
     await waitFor(() => expect(within(card).getByTestId('plan-days').textContent).toBe('Mon · Wed · Fri · 3 a week'));
-    expect(within(card).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Full body A5 exercises', 'Full body B6 exercises']);
+    expect(within(card).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Full body A6 exercises', 'Full body B6 exercises']);
     await fireEvent.click(within(card).getByRole('button', { name: 'Change plan' }));
     expect(location.hash).toBe('#/setup');
   });

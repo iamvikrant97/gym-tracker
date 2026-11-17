@@ -133,6 +133,8 @@ describe('library and the suggested plan', () => {
     const a = FULLBODY_SESSIONS[0].items.map((i) => i.exerciseId);
     expect(a).toContain('leg-press');
     expect(a).toContain('cable-crunch');
+    expect(a).toContain('hip-abduction-machine');
+    expect(FULLBODY_SESSIONS[1].items.map((i) => i.exerciseId)).toContain('hip-thrust');
     const b = FULLBODY_SESSIONS[1].items.map((i) => i.exerciseId);
     expect(b).toEqual(expect.arrayContaining(['hip-thrust', 'lat-pulldown-wide', 'db-incline-press', 'split-squat', 'db-curl']));
   });
@@ -317,7 +319,7 @@ describe('switching plans keeps the history', () => {
     const planned = store.plannedSets();
     expect(planned.map((p) => p.exerciseId)).toEqual([
       'leg-press', 'leg-press', 'leg-press', 'machine-chest-press', 'machine-chest-press', 'machine-chest-press',
-      'seated-machine-row', 'seated-machine-row', 'seated-machine-row', 'machine-shoulder-press', 'machine-shoulder-press', 'cable-crunch', 'cable-crunch',
+      'seated-machine-row', 'seated-machine-row', 'seated-machine-row', 'machine-shoulder-press', 'machine-shoulder-press', 'hip-abduction-machine', 'hip-abduction-machine', 'cable-crunch', 'cable-crunch',
     ]);
     expect(planned.every((p) => p.target === null && p.last === null)).toBe(true); // first time: no weight yet
   });

@@ -118,6 +118,7 @@ export const NEW_USER_SWAPS: string[][] = [
   ['machine-chest-press', 'db-incline-press', 'converging-chest-press', 'push-up'],
   ['romanian-deadlift', 'hip-thrust', 'db-romanian-deadlift'],
   ['split-squat', 'walking-lunge'],
+  ['hip-abduction-machine', 'cable-hip-abduction', 'glute-kickback-machine', 'cable-glute-kickback'],
   ['db-curl', 'cable-curl', 'hammer-curl'],
   ['bar-pushdown', 'rope-pushdown'],
   ['cable-crunch', 'dead-bug', 'hanging-knee-raise'],
@@ -196,7 +197,7 @@ const fb = (id: string, name: string, variant: 'A' | 'B', rows: [string, number]
 /** Full body A/B for 2-3 days a week: machines and simple lifts first, 2-3 sets each. */
 export const FULLBODY_SESSIONS: SessionTemplate[] = [
   fb('fb-a', 'Full body A', 'A', [
-    ['leg-press', 3], ['machine-chest-press', 3], ['seated-machine-row', 3], ['machine-shoulder-press', 2], ['cable-crunch', 2],
+    ['leg-press', 3], ['machine-chest-press', 3], ['seated-machine-row', 3], ['machine-shoulder-press', 2], ['hip-abduction-machine', 2], ['cable-crunch', 2],
   ]),
   fb('fb-b', 'Full body B', 'B', [
     ['hip-thrust', 3], ['lat-pulldown-wide', 3], ['db-incline-press', 3], ['split-squat', 2], ['db-curl', 2], ['dead-bug', 2],
