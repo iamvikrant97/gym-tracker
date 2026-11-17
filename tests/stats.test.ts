@@ -52,7 +52,7 @@ describe('weekStart', () => {
 describe('weeklySets', () => {
   it('counts working sets per muscle for the week', () => {
     expect(weeklySets(week, '2026-11-09')).toMatchObject({
-      Chest: 9, Back: 6, Shoulders: 9, Biceps: 4, Triceps: 3, Quads: 3, Hamstrings: 3, Calves: 3, Abs: 0,
+      Chest: 9, Back: 6, Shoulders: 9, Biceps: 4, Triceps: 3, Quads: 3, Hamstrings: 3, Glutes: 0, Calves: 3, Abs: 0,
     });
   });
   it('accepts any day within the week', () => {

@@ -1,4 +1,4 @@
-export type Muscle = 'Chest' | 'Back' | 'Shoulders' | 'Biceps' | 'Triceps' | 'Quads' | 'Hamstrings' | 'Calves' | 'Abs' | 'Other';
+export type Muscle = 'Chest' | 'Back' | 'Shoulders' | 'Biceps' | 'Triceps' | 'Quads' | 'Hamstrings' | 'Glutes' | 'Calves' | 'Abs' | 'Other';
 export type Group = 'CB' | 'L' | 'SA';
 /** Vik's ids are 'CB-A' ... 'SA-B'; plans made in the setup flow use their own ids ('fb-a', 'ul-upper-a', 'ppl-push-a', 'c1-ab12', ...). */
 export type SessionId = string;

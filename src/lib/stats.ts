@@ -2,7 +2,7 @@ import { e1rm, isPR } from './progression';
 import { exerciseById, sessionName } from './seed';
 import type { Exercise, Muscle, SetLog, Settings, Workout } from './types';
 
-const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
+const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Other'];
 const DAY_MS = 86_400_000;
 const MET = 5;
 const SECONDS_PER_SET = 40;
@@ -132,7 +132,7 @@ export function homeNotes(sets: SetLog[], workouts: Workout[], s: Settings, toda
   const done = visitKeysInWeek(workouts, sets, today).size;
   const notes = [`${done} of ${s.weeklyTarget} sessions done this week`];
   if (!s.paused) {
-    const ages = (['Quads', 'Hamstrings', 'Calves'] as const)
+    const ages = (['Quads', 'Hamstrings', 'Glutes', 'Calves'] as const)
       .map((m) => daysSince(sets, m, today, lookup))
       .filter((d): d is number => d !== null);
     const legs = ages.length ? Math.min(...ages) : null;

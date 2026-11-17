@@ -5,7 +5,7 @@
 
   let { slot, muscle, onadded }: { slot?: string; muscle?: Muscle; onadded: (exercise: Exercise) => void } = $props();
 
-  const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
+  const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Other'];
   const SLOTS = [...new Set(EXERCISES.map((e) => e.slot))];
 
   let name = $state('');

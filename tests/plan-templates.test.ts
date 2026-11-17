@@ -99,7 +99,7 @@ describe('template contents', () => {
   it('Upper sessions train the upper body only, Lower the legs, and PPL splits push / pull / legs', () => {
     const muscles = (id: string, list: typeof PPL_SESSIONS) => new Set(list.find((s) => s.id === id)!.items.map((i) => exerciseById(i.exerciseId)!.muscle));
     const upper = new Set(['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps']);
-    const lower = new Set(['Quads', 'Hamstrings', 'Calves', 'Abs']);
+    const lower = new Set(['Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs']);
     for (const s of UPPERLOWER_SESSIONS) {
       const set = muscles(s.id, UPPERLOWER_SESSIONS);
       const pool = s.name.startsWith('Upper') ? upper : lower;

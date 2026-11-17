@@ -13,7 +13,7 @@
   import Sheet from '../ui/Sheet.svelte';
   import type { Exercise, Muscle, SetLog } from '../lib/types';
 
-  const LEGS: Muscle[] = ['Quads', 'Hamstrings', 'Calves'];
+  const LEGS: Muscle[] = ['Quads', 'Hamstrings', 'Glutes', 'Calves'];
   const PER_ARM_KEY = 'gym.perArmConfirmed';
   const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 

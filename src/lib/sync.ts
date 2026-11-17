@@ -37,7 +37,7 @@ export const DAY_NAMES: Record<SessionId | 'Other', string> = {
   Other: 'Other',
 };
 
-const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
+const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Other'];
 const norm = (s: unknown) => String(s ?? '').trim().toLowerCase();
 
 interface SheetSet {
