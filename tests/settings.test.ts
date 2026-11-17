@@ -240,3 +240,20 @@ describe('Import backup file message', () => {
     expect(await screen.findByText('Restored 0 sets, 0 workouts, 0 exercises, skipped 1 duplicate')).toBeTruthy();
   });
 });
+
+describe('feedback card', () => {
+  it('Send is off until something is typed, then opens the share sheet and clears the note', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, share });
+    render(Settings);
+    const send = await screen.findByRole('button', { name: 'Send feedback' });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    const box = screen.getByLabelText('Your feedback') as HTMLTextAreaElement;
+    await fireEvent.input(box, { target: { value: 'Add a water reminder' } });
+    expect((send as HTMLButtonElement).disabled).toBe(false);
+    await fireEvent.click(send);
+    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    expect(share.mock.calls[0][0].text).toContain('Add a water reminder');
+    await waitFor(() => expect(box.value).toBe(''));
+  });
+});

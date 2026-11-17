@@ -20,9 +20,10 @@
   import Sheet from '../ui/Sheet.svelte';
   import AddExerciseForm from '../ui/AddExerciseForm.svelte';
   import { showToast } from '../ui/toast.svelte';
+  import { FEEDBACK_MAX, sendFeedback } from '../lib/feedback';
   import type { Exercise, Muscle, Settings } from '../lib/types';
 
-  const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
+  const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Other'];
   const REST_CHOICES = Array.from({ length: (MAX_REST_SEC - 60) / 15 + 1 }, (_, i) => 60 + i * 15);
   const STEP_CHOICES = [0.5, 1, 1.25, 2, 2.5, 5, 10];
 
@@ -226,6 +227,18 @@
   }
 
   // ---- exercises ----
+  let feedback = $state('');
+  async function sendFb() {
+    const r = await sendFeedback(feedback, __APP_VERSION__);
+    if (r === 'shared') {
+      feedback = '';
+      showToast('Thanks, feedback sent');
+    } else if (r === 'copied') {
+      feedback = '';
+      showToast('Copied. Paste it in a message to send');
+    } else if (r === 'failed') showToast('Could not send. Select the text and copy it');
+  }
+
   const groups = $derived(MUSCLES.map((m) => ({ muscle: m, list: library.filter((e) => e.muscle === m) })).filter((g) => g.list.length || g.muscle !== 'Other'));
   async function setRest(id: string, value: string) {
     await save((cur) => {
@@ -492,6 +505,14 @@
     </div>
   </article>
 
+  <!-- Feedback -->
+  <article class="card" aria-label="Feedback">
+    <h2>Feedback</h2>
+    <p class="hint">Something to change, or not working? Write it here and send it to the person who shared the app with you.</p>
+    <textarea class="fb" aria-label="Your feedback" rows="4" maxlength={FEEDBACK_MAX} placeholder="What would make this better?" bind:value={feedback}></textarea>
+    <button class="secondary wide press" type="button" disabled={!feedback.trim()} onclick={sendFb}>Send feedback</button>
+  </article>
+
   <p class="about">Version {__APP_VERSION__} · built {__BUILD_DATE__}</p>
 </section>
 
@@ -533,6 +554,8 @@
   .dups small { display: block; color: var(--muted); font-size: 12px; }
   .dups { margin: 0; padding-left: 18px; font-size: 13.5px; display: grid; gap: 4px; }
   .pair > .primary { width: auto; height: 48px; font-size: 14px; }
+  .fb { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); color: var(--text); font: 15px/1.4 var(--body); resize: vertical; }
+  .secondary:disabled { opacity: 0.45; }
   .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
   .copyrow { display: flex; gap: 8px; align-items: center; }
   code {

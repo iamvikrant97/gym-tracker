@@ -23,7 +23,7 @@
   type Choice = PlanChoice;
   interface Draft { key: string; id: string; name: string; ids: string[] }
 
-  const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Calves', 'Abs', 'Other'];
+  const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Other'];
   const COUNTS = [2, 3, 4, 5, 6, 7];
   const NOTE = 'Start light for the first 2 weeks — stop 2–3 reps before failure';
 
