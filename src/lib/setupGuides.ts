@@ -75,6 +75,19 @@ export const SETUP: Record<string, string> = {
   'hip-abduction-machine': 'Sit with your back against the pad. Pads on the outside of your knees, feet on the plates.',
   'db-step-up': 'Use a box about knee height. Dumbbells at your sides, whole foot on the box.',
 
+  'machine-hip-thrust': 'Adjust the seat so the pad sits across your hips. Feet flat, shoulders against the back pad.',
+  'smith-hip-thrust': 'Upper back against a bench, bar over your hips with a pad. Feet flat, knees bent about 90° at the top.',
+  'single-leg-hip-thrust': 'Upper back on a bench, one foot flat on the floor, the other leg lifted. Hips start low.',
+  'frog-pump': 'Lie on your back, soles of your feet together, knees out to the sides. Heels close to your hips.',
+  'bulgarian-split-squat': 'Back foot on a bench behind you, front foot two steps ahead. Dumbbells at your sides, torso upright.',
+  'db-sumo-squat': 'Feet wide, toes pointing out. Hold one dumbbell hanging between your legs.',
+  'db-reverse-lunge': 'Dumbbells at your sides. Step back one long step with room behind you, torso upright.',
+  'db-curtsy-lunge': 'Dumbbells at your sides. Step one foot back and across behind you, hips square to the front.',
+  'cable-pull-through': 'Cable at the bottom with a rope. Face away, take two steps forward, rope between your legs, soft knees.',
+  'glute-kickback-machine': 'Adjust the pad so it sits on your heel or the back of your thigh. Hold the handles, chest on the pad.',
+  'cable-hip-abduction': 'Ankle strap on, cable at the bottom. Stand side-on, one step away, hold the frame.',
+  'glute-hyperextension': 'Adjust the pad so it sits below your hips. Toes turned slightly out, rounded upper back, hips doing the work.',
+
   // Core
   'cable-crunch': 'Cable at the top with a rope. Kneel two steps back, rope beside your head.',
   'hanging-knee-raise': 'Hang from the bar with straight arms. Shoulders down, no swinging.',
