@@ -10,6 +10,7 @@
   import AdjustSheet from '../ui/AdjustSheet.svelte';
   import SwapSheet from '../ui/SwapSheet.svelte';
   import AddExtraSheet from '../ui/AddExtraSheet.svelte';
+  import SetupSheet from '../ui/SetupSheet.svelte';
   import Sheet from '../ui/Sheet.svelte';
   import type { Exercise, Muscle, SetLog } from '../lib/types';
 
@@ -272,6 +273,7 @@
   }
 
   // ---- add exercise ----
+  let setupFor = $state<string | null>(null);
   let addOpen = $state(false);
   let flash = $state<string | null>(null);
 
@@ -375,7 +377,10 @@
           <div class="card-head">
             <span class="code">{c.code}</span>
             <div class="head-text">
-              <div class="ex-name" class:swapping={swapping === c.key}>{c.ex?.name ?? c.exerciseId}</div>
+              <div class="ex-name" class:swapping={swapping === c.key}>
+                {c.ex?.name ?? c.exerciseId}
+                {#if !c.orphan}<button class="info press" type="button" aria-label="How to set up {c.ex?.name ?? 'exercise'}" onclick={() => (setupFor = c.exerciseId)}><span aria-hidden="true">i</span></button>{/if}
+              </div>
               <div class="ex-sub">{c.range.repMin}–{c.range.repMax} reps · rest {fmtClock(c.restSec)} · steps of {fmtKg(c.step)} kg</div>
               {#if c.addWeight}<div class="ex-note add">Add weight today: you hit the top of the range</div>{/if}
               {#if c.ex?.note}<div class="ex-note">{c.ex.note}</div>{/if}
@@ -472,6 +477,7 @@
   onclose={() => (swapOpen = false)}
 />
 
+<SetupSheet open={setupFor !== null} exerciseId={setupFor ?? ''} onclose={() => (setupFor = null)} />
 <AddExtraSheet open={addOpen} taken={usedIds} priority={sessionMuscles} onpick={addPick} onclose={() => (addOpen = false)} />
 
 <Sheet open={perArmOpen} onclose={() => ((perArmOpen = false), (perArmAsk = null))} title="Weight per arm" sub="For single-arm exercises, log the weight on one side, not both sides added together.">
@@ -507,6 +513,12 @@
   .code { font: 600 13px/1 var(--display); color: var(--muted); padding-top: 4px; min-width: 20px; }
   .ex-name { font: 600 17px/1.25 var(--body); transition: filter 180ms var(--ease-out), opacity 180ms var(--ease-out); }
   .ex-name.swapping { filter: blur(2px); opacity: 0; }
+  .info {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; width: 22px; height: 22px; margin: -11px 0 -11px 4px;
+    border-radius: 50%; border: 1.5px solid var(--ring); color: var(--muted); font: italic 700 12px/1 var(--display); position: relative;
+  }
+  /* a 44px tap area around the small badge */
+  .info::after { content: ''; position: absolute; inset: -11px; }
   .ex-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .ex-note { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
   .ex-note.add { color: var(--blue); }
