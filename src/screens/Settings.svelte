@@ -20,7 +20,7 @@
   import Sheet from '../ui/Sheet.svelte';
   import AddExerciseForm from '../ui/AddExerciseForm.svelte';
   import { showToast } from '../ui/toast.svelte';
-  import { FEEDBACK_MAX, sendFeedback } from '../lib/feedback';
+  import { FEEDBACK_MAX, postFeedback, flushFeedback } from '../lib/feedback';
   import type { Exercise, Muscle, Settings } from '../lib/types';
 
   const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Other'];
@@ -228,16 +228,21 @@
 
   // ---- exercises ----
   let feedback = $state('');
+  let sendingFb = $state(false);
   async function sendFb() {
-    const r = await sendFeedback(feedback, __APP_VERSION__);
-    if (r === 'shared') {
-      feedback = '';
-      showToast('Thanks, feedback sent');
-    } else if (r === 'copied') {
-      feedback = '';
-      showToast('Copied. Paste it in a message to send');
-    } else if (r === 'failed') showToast('Could not send. Select the text and copy it');
+    if (sendingFb) return;
+    sendingFb = true;
+    const r = await postFeedback(feedback, __APP_VERSION__, settings.userName ?? '');
+    sendingFb = false;
+    feedback = '';
+    showToast(r === 'sent' ? 'Thanks, feedback sent' : 'Saved. It will send when you are online');
   }
+  $effect(() => {
+    void flushFeedback();
+    const on = () => void flushFeedback();
+    window.addEventListener('online', on);
+    return () => window.removeEventListener('online', on);
+  });
 
   const groups = $derived(MUSCLES.map((m) => ({ muscle: m, list: library.filter((e) => e.muscle === m) })).filter((g) => g.list.length || g.muscle !== 'Other'));
   async function setRest(id: string, value: string) {
@@ -508,9 +513,9 @@
   <!-- Feedback -->
   <article class="card" aria-label="Feedback">
     <h2>Feedback</h2>
-    <p class="hint">Something to change, or not working? Write it here and send it to the person who shared the app with you.</p>
+    <p class="hint">Something to change, or not working? Write it here and it goes straight to the app's maker.</p>
     <textarea class="fb" aria-label="Your feedback" rows="4" maxlength={FEEDBACK_MAX} placeholder="What would make this better?" bind:value={feedback}></textarea>
-    <button class="secondary wide press" type="button" disabled={!feedback.trim()} onclick={sendFb}>Send feedback</button>
+    <button class="secondary wide press" type="button" disabled={!feedback.trim() || sendingFb} onclick={sendFb}>{sendingFb ? 'Sending…' : 'Send feedback'}</button>
   </article>
 
   <p class="about">Version {__APP_VERSION__} · built {__BUILD_DATE__}</p>
