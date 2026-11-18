@@ -42,30 +42,34 @@ describe('in-app feedback', () => {
     vi.unstubAllGlobals();
     localStorage.clear();
   });
-  const stubBeacon = (ok: boolean) => {
-    const beacon = vi.fn().mockReturnValue(ok);
-    vi.stubGlobal('navigator', { ...navigator, sendBeacon: beacon });
-    return beacon;
-  };
 
   it('posts the three answers to the form without leaving the app', async () => {
-    const beacon = stubBeacon(true);
+    const f = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal('fetch', f);
     expect(await postFeedback('  Add a timer ', '1.2.3', 'Minal')).toBe('sent');
-    const [url, data] = beacon.mock.calls[0];
+    const [url, init] = f.mock.calls[0];
     expect(url).toBe(FORM_URL);
-    const sent = new URLSearchParams(String(data));
+    expect(init.mode).toBe('no-cors');
+    const sent = new URLSearchParams(init.body as string);
     expect(sent.get('entry.76885707')).toBe('Add a timer');
     expect(sent.get('entry.1559706373')).toBe('1.2.3');
     expect(sent.get('entry.345109602')).toBe('Minal');
   });
 
-  it('keeps it when the browser cannot send, and sends it later', async () => {
-    stubBeacon(false);
+  it('keeps it when offline and sends it later', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
     expect(await postFeedback('Offline note', '1')).toBe('queued');
     expect(await flushFeedback()).toBe(0);
-    const ok = stubBeacon(true);
+    const ok = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal('fetch', ok);
     expect(await flushFeedback()).toBe(1);
     expect(ok).toHaveBeenCalledTimes(1);
     expect(await flushFeedback()).toBe(0);
+  });
+
+  it('the app security policy allows the form address', async () => {
+    const { readFileSync } = await import('node:fs');
+    expect(readFileSync('vite-csp.ts', 'utf8')).toContain('connect-src');
+    expect(readFileSync('vite-csp.ts', 'utf8')).toContain('https://docs.google.com');
   });
 });

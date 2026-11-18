@@ -16,7 +16,7 @@ export const CSP = [
   "worker-src 'self'",
   "frame-src 'none'",
   "img-src 'self' https://*.scdn.co https://*.spotifycdn.com",
-  "connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://script.google.com https://script.googleusercontent.com",
+  "connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://script.google.com https://script.googleusercontent.com https://docs.google.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

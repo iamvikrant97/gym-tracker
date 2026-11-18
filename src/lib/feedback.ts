@@ -41,9 +41,8 @@ function body(p: Pending): string {
 
 async function post(p: Pending): Promise<boolean> {
   try {
-    // sendBeacon is a plain form post the browser sends itself: no CORS, and the app's service worker cannot get in its way
-    // (a normal fetch to Google fails from the installed app). It returns false only when the browser could not queue it.
-    if (typeof navigator.sendBeacon === 'function') return navigator.sendBeacon(FORM_URL, new URLSearchParams(body(p)));
+    // no-cors: Google answers without CORS headers, so the response is opaque; a network failure is the only thing that throws.
+    // The app's content security policy must list docs.google.com under connect-src (vite-csp.ts) or this always fails.
     await fetch(FORM_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body(p) });
     return true;
   } catch {

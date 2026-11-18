@@ -20,7 +20,7 @@ describe('Content-Security-Policy', () => {
     expect(CSP).not.toMatch(/unsafe-inline|unsafe-eval|\sdata:|\*\s|https:\s*;/);
     expect(dir('script-src')).toBe("script-src 'self'");
     expect(dir('style-src')).toBe("style-src 'self'");
-    expect(dir('connect-src')).toBe("connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://script.google.com https://script.googleusercontent.com");
+    expect(dir('connect-src')).toBe("connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://script.google.com https://script.googleusercontent.com https://docs.google.com");
     expect(CSP).toContain("object-src 'none'");
     expect(CSP).toContain("frame-src 'none'");
     expect(CSP).toContain("base-uri 'self'");
