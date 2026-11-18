@@ -264,3 +264,32 @@ describe('workout view maths', () => {
     expect(meter(buildCards([], []))).toEqual({ done: 0, total: 0 });
   });
 });
+
+describe('AdjustSheet small step', () => {
+  it('adds and removes 0.5 kg while the big buttons keep the exercise step', async () => {
+    vi.useRealTimers();
+    render(AdjustSheet, { props: { open: true, title: 'T', kg: 10, reps: 8, step: 2.5, onsave: () => {}, onclose: () => {} } });
+    const kg = () => screen.getByTestId('adjust-kg').textContent;
+    await fireEvent.click(screen.getByRole('button', { name: 'Plus 0.5 kg' }));
+    expect(kg()).toBe('10.5');
+    await fireEvent.click(screen.getByRole('button', { name: 'Plus 0.5 kg' }));
+    expect(kg()).toBe('11');
+    await fireEvent.click(screen.getByRole('button', { name: 'Minus 0.5 kg' }));
+    expect(kg()).toBe('10.5');
+    await fireEvent.click(screen.getByRole('button', { name: 'More weight' }));
+    expect(kg()).toBe('13');
+  });
+
+  it('never goes below zero', async () => {
+    render(AdjustSheet, { props: { open: true, title: 'T', kg: 0.5, reps: 8, step: 2.5, onsave: () => {}, onclose: () => {} } });
+    const kg = () => screen.getByTestId('adjust-kg').textContent;
+    await fireEvent.click(screen.getByRole('button', { name: 'Minus 0.5 kg' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Minus 0.5 kg' }));
+    expect(kg()).toBe('0');
+  });
+
+  it('is hidden when the exercise already steps by 0.5 or less', () => {
+    render(AdjustSheet, { props: { open: true, title: 'T', kg: 5, reps: 8, step: 0.5, onsave: () => {}, onclose: () => {} } });
+    expect(screen.queryByRole('button', { name: 'Plus 0.5 kg' })).toBeNull();
+  });
+});

@@ -10,7 +10,9 @@
   import { buzz } from '../lib/device';
   import { dropSet, fmtKg, round2 } from '../lib/workoutView';
 
-  type Field = 'kg' | 'reps';
+  type Field = 'kg' | 'fine' | 'reps';
+  /** The small step for in-between plates; shown only when the exercise's own step is bigger. */
+  const FINE = 0.5;
 
   let {
     open,
@@ -41,6 +43,7 @@
 
   function change(f: Field, d: number) {
     if (f === 'kg') kg = Math.max(0, round2(kg + d * step));
+    else if (f === 'fine') kg = Math.max(0, round2(kg + d * FINE));
     else reps = Math.max(1, reps + d);
     buzz(6);
   }
@@ -84,6 +87,13 @@
     </div>
     <button class="sb" type="button" aria-label="More weight" onpointerdown={(e) => hold(e, 'kg', 1)} onpointerup={stop} onpointerleave={stop} onpointercancel={stop} onclick={(e) => keyClick(e, 'kg', 1)}>+</button>
   </div>
+  {#if step > FINE}
+    <div class="fine" role="group" aria-label="Small weight steps">
+      <button class="fb press" type="button" aria-label="Minus {FINE} kg" onpointerdown={(e) => hold(e, 'fine', -1)} onpointerup={stop} onpointerleave={stop} onpointercancel={stop} onclick={(e) => keyClick(e, 'fine', -1)}>−{FINE}</button>
+      <span>small step</span>
+      <button class="fb press" type="button" aria-label="Plus {FINE} kg" onpointerdown={(e) => hold(e, 'fine', 1)} onpointerup={stop} onpointerleave={stop} onpointercancel={stop} onclick={(e) => keyClick(e, 'fine', 1)}>+{FINE}</button>
+    </div>
+  {/if}
   <div class="stepper">
     <button class="sb" type="button" aria-label="Fewer reps" onpointerdown={(e) => hold(e, 'reps', -1)} onpointerup={stop} onpointerleave={stop} onpointercancel={stop} onclick={(e) => keyClick(e, 'reps', -1)}>−</button>
     <div class="big" role="spinbutton" tabindex="0" aria-label="Reps" aria-valuenow={reps} aria-valuemin={1} onkeydown={(e) => spinKey(e, 'reps')}>
@@ -107,6 +117,10 @@
     display: grid; place-items: center; touch-action: manipulation; user-select: none; -webkit-user-select: none;
     transition: transform 120ms var(--ease-out), background 120ms;
   }
+  .fine { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 10px; margin: 0 0 6px; }
+  .fine span { text-align: center; font-size: 12px; color: var(--muted); }
+  .fb { height: 44px; border-radius: 12px; background: var(--raised); font: 600 15px/1 var(--display); touch-action: manipulation; user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums; }
+  .fb:active { background: #252a35; }
   .sb:active { transform: scale(0.95); background: #252a35; }
   .big { text-align: center; font: 700 52px/1 var(--display); font-variant-numeric: tabular-nums; border-radius: 12px; outline: none; }
   .big:focus-visible { outline: 2px solid var(--blue); }
