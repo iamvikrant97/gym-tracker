@@ -161,6 +161,15 @@
       .map((text, i) => ({ text, strong: i % 2 === 1 }));
   }
 
+  async function reopenToday() {
+    try {
+      await workout.reopen();
+      location.hash = '#/workout';
+    } catch {
+      showToast('Could not continue the workout');
+    }
+  }
+
   async function start() {
     if (starting || !workout.ready) return;
     starting = true;
@@ -223,6 +232,9 @@
     <button class="another press" type="button" aria-label="Train another session today" disabled={!workout.ready || starting} onclick={start}>
       Train another session today<small>{template.name}</small>
     </button>
+    {#if workout.canReopen(now)}
+      <button class="swapday" type="button" onclick={reopenToday}>Finished by mistake? Continue workout</button>
+    {/if}
     <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Choose a different session</button>
   {:else}
     <article class="today">

@@ -260,6 +260,21 @@ export class WorkoutStore {
     return WorkoutStore.#continuable(this.current, now);
   }
 
+  /** True when the current workout was finished by hand today, less than 3 h ago: offer "Continue workout" in case that was a mistake. */
+  canReopen(now: number = Date.now()): boolean {
+    const w = this.current;
+    return !!w && w.endedAt !== undefined && !w.autoEnded && now - w.endedAt < RESUME_WINDOW_MS && localDate(now) === w.date;
+  }
+
+  /** Reopens a workout that was finished by hand (same id, date and sets). Throws if it is too late to continue it. */
+  reopen(now: number = Date.now()): Promise<Workout> {
+    return this.#run(async () => {
+      const w = this.current;
+      if (!w || !this.canReopen(now)) throw new Error('This workout cannot be continued');
+      return this.#reopen(w);
+    });
+  }
+
   async #reopen(w: Workout): Promise<Workout> {
     const open: Workout = { ...w };
     delete open.endedAt;
@@ -302,7 +317,14 @@ export class WorkoutStore {
         }
       }
       // A stale workout stays exposed (ended) so the summary can still show it.
-      const shown = keep ? { w: keep, sets: keepSets } : latestEnded;
+      let shown = keep ? { w: keep, sets: keepSets } : latestEnded;
+      // Nothing open: a workout finished by hand a moment ago stays reachable, so a mistaken Finish can be undone after a restart.
+      if (!shown) {
+        const recent = (await getAll<Workout>('workouts'))
+          .filter((w) => w.endedAt !== undefined && !w.autoEnded && now - w.endedAt < RESUME_WINDOW_MS && localDate(now) === w.date)
+          .sort((a, b) => b.endedAt! - a.endedAt!)[0];
+        if (recent) shown = { w: recent, sets: (await getAllFromIndex<SetLog>('sets', 'workoutId', recent.id)).filter(live) };
+      }
       this.current = shown?.w ?? null;
       this.sets = shown?.sets ?? [];
       await this.#loadHistory(this.current?.id ?? null);

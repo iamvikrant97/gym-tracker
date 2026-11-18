@@ -35,7 +35,8 @@
   });
   async function continueWorkout() {
     try {
-      await workout.resume();
+      if (workout.canResume()) await workout.resume();
+      else await workout.reopen();
       location.hash = '#/workout';
     } catch {
       /* no longer continuable: stay on the summary */
@@ -78,7 +79,7 @@
       <p>Don't add this to MyFitnessPal — your 2,650 kcal target already includes training.</p>
     </div>
 
-    {#if workout.canResume()}
+    {#if workout.canResume() || workout.canReopen()}
       <button class="more press" type="button" onclick={continueWorkout}>Continue workout</button>
     {/if}
     <button class="done press" type="button" onclick={() => (location.hash = '#/')}>Done</button>

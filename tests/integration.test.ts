@@ -80,6 +80,38 @@ describe('auto-end never blocks logging (I2)', () => {
     await expect(s.resume(at(11, 9, 31))).rejects.toThrow();
   });
 
+  it('reopen() continues a workout finished by hand, the same day within 3 h; not later, not tomorrow', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', at(11, 7));
+    await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 3));
+    await s.finish(at(11, 8));
+    expect(s.canReopen(at(11, 8, 5))).toBe(true);
+    expect(s.canResume(at(11, 8, 5))).toBe(false);
+    await s.reopen(at(11, 8, 5));
+    expect(s.active).toBe(true);
+    expect(s.current?.id).toBe(w.id);
+    expect(s.sets).toHaveLength(1);
+    const { set } = await s.completeSet(FIRST, 2, 40, 10, at(11, 8, 6));
+    expect(set.workoutId).toBe(w.id);
+    await s.finish(at(11, 8, 30));
+    expect(s.canReopen(at(11, 11, 31))).toBe(false);
+    expect(s.canReopen(at(12, 7))).toBe(false);
+    await expect(s.reopen(at(11, 11, 31))).rejects.toThrow();
+  });
+
+  it('after a restart a workout finished by mistake can still be reopened', async () => {
+    const s = new WorkoutStore();
+    const w = await s.startWorkout('CB-B', at(11, 7));
+    await s.completeSet(FIRST, 1, 40, 10, at(11, 7, 3));
+    await s.finish(at(11, 7, 30));
+    const fresh = new WorkoutStore();
+    await fresh.restore(at(11, 7, 40));
+    expect(fresh.canReopen(at(11, 7, 40))).toBe(true);
+    await fresh.reopen(at(11, 7, 40));
+    expect(fresh.current?.id).toBe(w.id);
+    expect(fresh.active).toBe(true);
+  });
+
   it('after a restart the auto-ended workout can still be continued', async () => {
     const s = new WorkoutStore();
     const w = await s.startWorkout('CB-B', at(11, 7));

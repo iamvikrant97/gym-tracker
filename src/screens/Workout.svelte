@@ -437,8 +437,8 @@
         <button class="discard" type="button" onclick={discard}>Discard workout (no sets yet)</button>
       {/if}
     {:else}
-      {#if workout.canResume()}
-        <button class="finish ready press" type="button" onclick={() => workout.resume().catch(() => showToast('Could not continue'))}>Continue workout</button>
+      {#if workout.canResume() || workout.canReopen()}
+        <button class="finish ready press" type="button" onclick={() => (workout.canResume() ? workout.resume() : workout.reopen()).catch(() => showToast('Could not continue'))}>Continue workout</button>
         <button class="discard" type="button" onclick={finish}>See summary</button>
       {:else}
         <button class="finish ready press" type="button" onclick={finish}>See summary</button>
