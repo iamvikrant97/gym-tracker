@@ -243,8 +243,8 @@ describe('Import backup file message', () => {
 
 describe('feedback card', () => {
   it('Send is off until something is typed, then posts to the form in the app and clears the note', async () => {
-    const f = vi.fn().mockResolvedValue(new Response(null));
-    vi.stubGlobal('fetch', f);
+    const f = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', { ...navigator, sendBeacon: f });
     render(Settings);
     const send = await screen.findByRole('button', { name: 'Send feedback' });
     expect((send as HTMLButtonElement).disabled).toBe(true);
@@ -252,7 +252,7 @@ describe('feedback card', () => {
     await fireEvent.input(box, { target: { value: 'Add a water reminder' } });
     expect((send as HTMLButtonElement).disabled).toBe(false);
     await fireEvent.click(send);
-    await waitFor(() => expect(f.mock.calls.some(([, i]) => String(i?.body).includes('Add+a+water+reminder'))).toBe(true));
+    await waitFor(() => expect(f.mock.calls.some(([, d]) => String(d).includes('Add+a+water+reminder'))).toBe(true));
     await waitFor(() => expect(box.value).toBe(''));
   });
 });
