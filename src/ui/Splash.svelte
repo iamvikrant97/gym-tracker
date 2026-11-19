@@ -28,7 +28,7 @@
       <g class="pl r2"><rect x="374" y="64" width="32" height="172" rx="10" fill="#2dd4bf" /></g>
       <g class="pl r3"><rect x="414" y="92" width="28" height="116" rx="9" fill="#f2b544" /></g>
     </svg>
-    <div class="name"><span>Rep</span><span>Rest</span><span>Repeat</span></div>
+    <div class="name"><span>Rep</span><span>Set</span><span>Go</span></div>
   </div>
 {/if}
 
