@@ -1,8 +1,9 @@
 <script lang="ts">
   import { getAll, loadSettings, DEFAULT_SETTINGS } from '../lib/db';
   import { greetingFor } from '../lib/greeting';
-  import { currentPlan, exerciseById, templateFor } from '../lib/seed';
-  import { dayVisits, homeNotes, visitKey, visitKeysInWeek } from '../lib/stats';
+  import { currentPlan, exerciseById, templateFor, templateOf } from '../lib/seed';
+  import { BUILDER_MUSCLES, buildCustom, customName, isRestDay, recommend } from '../lib/flex';
+  import { dayVisits, homeNotes, visitKey, visitKeysInWeek, weekStart } from '../lib/stats';
   import { showToast } from '../ui/toast.svelte';
   import { onMount } from 'svelte';
   import { nextInPlan, nextPlannedWorkout } from '../lib/selection';
@@ -10,7 +11,7 @@
   import { workout, localDate, EXTRA_SETS } from '../lib/workout.svelte';
   import { backupStatus, backupTone, lastBackupAt, lastBackupLabel } from '../lib/backupReminder';
   import { estimateMinutes } from '../lib/workoutView';
-  import type { SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
+  import type { Muscle, SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
   import Sheet from '../ui/Sheet.svelte';
   import DaySummarySheet from '../ui/DaySummarySheet.svelte';
 
@@ -21,6 +22,8 @@
   let settings = $state.raw<Settings>(workout.settings ?? DEFAULT_SETTINGS);
   let picked = $state<SessionId | null>(null);
   let swapOpen = $state(false);
+  let building = $state(false);
+  let chosenMuscles = $state<Muscle[]>([]);
   let summaryOpen = $state(false);
 
   // The app can sit open (or in the background) overnight: re-read the clock when it comes back and every minute.
@@ -80,7 +83,7 @@
   const resuming = $derived(workout.active);
   // Closed by the idle rule earlier today (a call, a queue for the bench): offer to carry on with it.
   // (a session of a plan that was since replaced is not continued)
-  const continuing = $derived(!resuming && picked === null && !!workout.current && !!templateFor(workout.current.sessionId) && workout.canResume(now));
+  const continuing = $derived(!resuming && picked === null && !!workout.current && !!templateOf(workout.current) && workout.canResume(now));
   const following = $derived(resuming || continuing);
   // A workout with no sets (discarded, or opened by mistake and closed) does not move the rotation on.
   const counted = $derived.by(() => {
@@ -88,7 +91,7 @@
     return workouts.filter((w) => withSets.has(w.id) || w.id === workout.current?.id);
   });
   const sessionId = $derived<SessionId>(
-    following ? workout.current!.sessionId : (picked ?? nextInPlan(planNow, counted)),
+    following ? workout.current!.sessionId : (picked ?? nextInPlan(planNow, counted, today)),
   );
   const swapSub = $derived(
     planNow.sessions.length === 1 ? 'Your session' : `Pick any of your ${planNow.sessions.length === 6 ? 'six' : planNow.sessions.length} sessions`,
@@ -207,6 +210,66 @@
     picked = id;
     setTimeout(() => (swapOpen = false), 140);
   }
+
+  const lookup = (id: string) => exerciseById(id) ?? workout.exercise(id);
+  const planNext = $derived(nextInPlan(planNow, counted, today));
+  const restToday = $derived(isRestDay(settings.restDays, today));
+  // First open of a new week with nothing done yet: ask how to start it (old plan from the top, custom, or a new plan).
+  const thisWeekCount = $derived(counted.filter((w) => weekStart(w.date) === weekStart(today)).length);
+  const showWeekPrompt = $derived(
+    !following && !done && !restToday && counted.length > 0 && thisWeekCount === 0 && settings.weekPrompt !== weekStart(today),
+  );
+  async function answerWeek(then?: 'custom' | 'plan') {
+    try {
+      await workout.updateSettings({ weekPrompt: weekStart(today) });
+      settings = workout.settings ?? settings;
+    } catch { /* the card just shows again */ }
+    if (then === 'custom') { building = true; swapOpen = true; }
+    if (then === 'plan') location.hash = '#/setup';
+  }
+  const rec = $derived(recommend(planNow, counted, sets, today, lookup));
+  const nameOf = (id: SessionId) => planNow.sessions.find((t) => t.id === id)?.name ?? id;
+
+  // Rest day: marked by hand, counts as rest (no session, the plan does not move on). Undo takes it back.
+  async function setRest(on: boolean) {
+    try {
+      await workout.updateSettings((cur) => {
+        const rest = new Set(cur.restDays ?? []);
+        if (on) rest.add(today);
+        else rest.delete(today);
+        return { ...cur, restDays: [...rest].sort() };
+      });
+      settings = workout.settings ?? settings;
+      swapOpen = false;
+    } catch {
+      showToast('Could not save that');
+    }
+  }
+
+  function toggleMuscle(m: Muscle) {
+    chosenMuscles = chosenMuscles.includes(m) ? chosenMuscles.filter((x) => x !== m) : [...chosenMuscles, m];
+  }
+  async function startCustom() {
+    if (starting || chosenMuscles.length === 0) return;
+    starting = true;
+    try {
+      const c = buildCustom(chosenMuscles, planNow, lookup);
+      if (c.items.length === 0) throw new Error('No exercises for that choice');
+      await workout.startCustom(c.name, c.items);
+      swapOpen = false;
+      building = false;
+      chosenMuscles = [];
+      location.hash = '#/workout';
+    } catch (e) {
+      showToast(e instanceof Error ? `Could not start: ${e.message}` : 'Could not start the workout');
+    } finally {
+      starting = false;
+    }
+  }
+  function closeSwap() {
+    swapOpen = false;
+    building = false;
+  }
 </script>
 
 <section class="screen">
@@ -248,7 +311,31 @@
       <button class="swapday" type="button" onclick={reopenToday}>Finished by mistake? Continue workout</button>
     {/if}
     <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Choose a different session</button>
+  {:else if restToday && !following}
+    <article class="today restcard" data-testid="rest-card">
+      <div class="lbl">Today</div>
+      <h2>Rest day</h2>
+      <div class="meta">Counted as rest. Your plan stays where it is.</div>
+      <div class="restnext">Next up: <b>{nameOf(planNext)}</b></div>
+      <button class="swapday" type="button" onclick={() => setRest(false)}>Undo rest day</button>
+      <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Train anyway</button>
+    </article>
   {:else}
+    {#if showWeekPrompt}
+      <aside class="weekcard" data-testid="week-prompt" aria-label="New week">
+        <div class="lbl">New week</div>
+        <b>How do you want to start it?</b>
+        <button type="button" class="card3 press" data-testid="week-plan" onclick={() => answerWeek()}>
+          <span class="nm">Continue my plan</span><span class="meta2">Starts again from {nameOf(planNext)}</span>
+        </button>
+        <button type="button" class="card3 press" data-testid="week-custom" onclick={() => answerWeek('custom')}>
+          <span class="nm">Custom workout</span><span class="meta2">Pick the muscles for today</span>
+        </button>
+        <button type="button" class="card3 press" data-testid="week-new" onclick={() => answerWeek('plan')}>
+          <span class="nm">New plan</span><span class="meta2">Set up a different plan</span>
+        </button>
+      </aside>
+    {/if}
     <article class="today">
       <div class="lbl">Today · session {sessionNo} of {settings.weeklyTarget}</div>
       <h2>{template.name}</h2>
@@ -261,6 +348,7 @@
       <button class="start btn-primary press" type="button" disabled={!workout.ready || starting} onclick={start}>{resuming ? 'Resume workout' : continuing ? 'Continue workout' : 'Start workout'}</button>
       {#if !resuming}
         <button class="swapday" type="button" onclick={() => (swapOpen = true)}>Swap day</button>
+        <button class="swapday" type="button" data-testid="rest-day" onclick={() => setRest(true)}>Rest day</button>
       {:else if resumingEmpty}
         <button class="swapday" type="button" onclick={discard}>Discard workout (no sets yet)</button>
       {/if}
@@ -286,19 +374,47 @@
 
 <DaySummarySheet open={summaryOpen} onclose={() => (summaryOpen = false)} title={summaryTitle} visits={todayVisits} />
 
-<Sheet open={swapOpen} onclose={() => (swapOpen = false)} title="Swap day" sub={swapSub}>
-  <div role="radiogroup" aria-label="Session">
-    {#each planNow.sessions as t (t.id)}
-      {@const info = describe(t)}
-      <button type="button" role="radio" class="opt press" aria-checked={t.id === sessionId} onclick={() => choose(t.id)}>
-        <span>
-          <span class="nm">{t.name}</span>
-          <span class="meta2">{info.setCount} sets · about {info.minutes} min</span>
-        </span>
-        <span class="dot"></span>
+<Sheet open={swapOpen} onclose={closeSwap} title="Swap day" sub={building ? 'Pick the muscles for today' : swapSub}>
+  {#if building}
+    <div class="chips" role="group" aria-label="Muscles">
+      {#each BUILDER_MUSCLES as m (m)}
+        <button type="button" class="chip press" aria-pressed={chosenMuscles.includes(m)} onclick={() => toggleMuscle(m)}>{m}</button>
+      {/each}
+    </div>
+    <p class="cnote">{chosenMuscles.length ? customName(chosenMuscles) : 'Pick one or more'} · two exercises each, three sets. Your plan is not changed.</p>
+    <button class="start btn-primary press" type="button" disabled={chosenMuscles.length === 0 || starting} onclick={startCustom}>Start this workout</button>
+    <button class="swapday" type="button" onclick={() => (building = false)}>Back</button>
+  {:else}
+    <div class="pick3">
+      <button type="button" class="card3 press" data-testid="pick-plan" onclick={() => choose(planNext)}>
+        <span class="k3">Next in your plan</span>
+        <span class="nm">{nameOf(planNext)}</span>
       </button>
-    {/each}
-  </div>
+      <button type="button" class="card3 rec press" data-testid="pick-rec" onclick={() => choose(rec.sessionId)}>
+        <span class="k3">Recommended{rec.sessionId === planNext ? ' · same as plan' : ''}</span>
+        <span class="nm">{nameOf(rec.sessionId)}</span>
+        <span class="meta2">{rec.reason}</span>
+      </button>
+      <button type="button" class="card3 press" data-testid="pick-custom" onclick={() => (building = true)}>
+        <span class="k3">Custom</span>
+        <span class="nm">Pick the muscles</span>
+        <span class="meta2">e.g. chest, legs and shoulders</span>
+      </button>
+    </div>
+    <div class="lbl all">Or any session</div>
+    <div role="radiogroup" aria-label="Session">
+      {#each planNow.sessions as t (t.id)}
+        {@const info = describe(t)}
+        <button type="button" role="radio" class="opt press" aria-checked={t.id === sessionId} onclick={() => choose(t.id)}>
+          <span>
+            <span class="nm">{t.name}</span>
+            <span class="meta2">{info.setCount} sets · about {info.minutes} min</span>
+          </span>
+          <span class="dot"></span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 </Sheet>
 
 <style>
@@ -352,6 +468,19 @@
   .plan-hint p { margin: 0; flex: 1; font-size: 13.5px; color: var(--muted); }
   .plan-hint .x { width: 48px; height: 48px; flex: none; border-radius: 12px; color: var(--muted); font-size: 15px; }
 
+  .restcard .restnext { margin: 14px 0 4px; font-size: 14px; color: var(--muted); }
+  .restcard .restnext b { color: var(--text); font-weight: 600; }
+  .weekcard { display: grid; gap: 8px; margin-bottom: 12px; padding: 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
+  .weekcard b { font: 700 18px/1.2 var(--body); margin-bottom: 4px; }
+  .pick3 { display: grid; gap: 8px; margin-bottom: 14px; }
+  .card3 { display: grid; gap: 2px; text-align: left; padding: 14px 16px; min-height: 64px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); }
+  .card3.rec { border-color: var(--blue); }
+  .k3 { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .all { margin: 4px 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip { min-height: 48px; padding: 0 16px; border-radius: 24px; background: var(--raised); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+  .chip[aria-pressed='true'] { background: var(--blue); color: var(--on-blue); border-color: var(--blue); }
+  .cnote { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
   .opt { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 12px; min-height: 56px; border-radius: 12px; text-align: left; }
   .nm { display: block; font-weight: 600; }
   .meta2 { display: block; font-size: 12px; color: var(--muted); }

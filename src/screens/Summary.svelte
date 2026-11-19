@@ -23,7 +23,7 @@
   const w = $derived(visit?.workout ?? null);
   const kg = $derived(bodyKg ?? workout.settings?.bodyKg ?? DEFAULT_BODY_KG);
   const s = $derived(w && visit ? workoutSummary(w, visit.sets, kg, (id) => workout.exercise(id)) : null);
-  const name = $derived(w ? (sessionName(w.sessionId) ?? 'Workout') : '');
+  const name = $derived(w ? (w.custom?.name ?? sessionName(w.sessionId) ?? 'Workout') : '');
   const work = $derived(s ? Math.round(s.workRatio * 100) : 0);
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { workout, UNDO_MS } from '../lib/workout.svelte';
-  import { exerciseById, rangeFor, sessionName, templateFor } from '../lib/seed';
+  import { exerciseById, rangeFor, sessionName, templateOf } from '../lib/seed';
   import { addWeightDue, isPR } from '../lib/progression';
   import { buildCards, finishAt, fmtClock, fmtElapsed, fmtKg, fmtTime, meter, nextUp, remaining, round2 } from '../lib/workoutView';
   import { buzz } from '../lib/device';
@@ -28,7 +28,7 @@
   let drafts = $state<Record<string, Draft>>({});
 
   const w = $derived(workout.current);
-  const template = $derived(w ? templateFor(w.sessionId) : undefined);
+  const template = $derived(w ? templateOf(w) : undefined);
   const planned = $derived(w ? workout.plannedSets() : []);
   const cards = $derived(buildCards(planned, workout.sets));
   const progress = $derived(meter(cards));

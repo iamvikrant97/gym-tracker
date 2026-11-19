@@ -277,6 +277,11 @@ export function templateFor(sessionId: SessionId): SessionTemplate | undefined {
   return currentPlan().sessions.find((t) => t.id === sessionId);
 }
 
+/** The template a workout follows: its own custom one, else its session in the plan. */
+export function templateOf(w: { sessionId: SessionId; custom?: { name: string; items: SessionTemplate['items'] } }): SessionTemplate | undefined {
+  return w.custom ? { id: w.sessionId, name: w.custom.name, items: w.custom.items } : templateFor(w.sessionId);
+}
+
 /**
  * Name of a session, for old sets too: the active plan, then Vik's and the Full body sessions (always known),
  * then sessions of plans that were replaced. Undefined when nothing knows it.

@@ -86,6 +86,8 @@ export interface Workout {
   autoEnded?: true;
   /** Exercises added to this workout only ("Add exercise"), in the order added. Each has its own sets, next to the session's. */
   extras?: string[];
+  /** A one-off workout built from chosen muscles (not part of the plan). Carries its own name and exercises; sessionId is 'CUSTOM'. */
+  custom?: { name: string; items: TemplateItem[] };
   /** Extra working sets added to an exercise in this workout only (the + button), by exercise id. */
   extraSets?: Record<string, number>;
 }
@@ -117,6 +119,10 @@ export interface Settings {
   greetNames?: GreetNames;
   /** The "Ready to change things up?" hint on Home was dismissed (shown once). */
   planHintDismissed?: boolean;
+  /** Days (YYYY-MM-DD) marked as rest days by hand. They do not count as sessions and do not move the plan on. */
+  restDays?: string[];
+  /** Monday (YYYY-MM-DD) of the week whose "how do you want to start?" card was answered. */
+  weekPrompt?: string;
 }
 
 export interface GreetNames {

@@ -5,7 +5,7 @@ import type { QueueItem } from './db';
 import { scheduleFlush } from './sync';
 import { isPR, lastSessionSets, targetFor } from './progression';
 import { setActivePlan, setRetiredNames } from './activePlan.svelte';
-import { exerciseById, rangeFor, resolvePlan, templateFor } from './seed';
+import { exerciseById, rangeFor, resolvePlan, templateOf } from './seed';
 import type { Exercise, SessionId, SetLog, Settings, Workout } from './types';
 
 /** An open workout with no set for this long is closed (Finish forgotten). Rests are at most 5 min; calls and queues happen. */
@@ -156,12 +156,12 @@ export class WorkoutStore {
   // ---- lifecycle ----------------------------------------------------------------------
 
   /** Closes anything still open by the auto-end rule, then opens a new workout. Caller holds the lock. */
-  async #begin(sessionId: SessionId, now: number, swaps: Record<string, string> = {}, extras: string[] = []): Promise<Workout> {
+  async #begin(sessionId: SessionId, now: number, swaps: Record<string, string> = {}, extras: string[] = [], custom?: Workout['custom']): Promise<Workout> {
     for (const w of (await getAll<Workout>('workouts')).filter((x) => x.endedAt === undefined)) {
       const sets = await getAllFromIndex<SetLog>('sets', 'workoutId', w.id);
       await this.#endWorkout(w, Math.min(now, WorkoutStore.lastActivity(w, sets) + AUTO_END_MS), true);
     }
-    const w: Workout = { id: crypto.randomUUID(), date: localDate(now), sessionId, startedAt: now, swaps: { ...swaps }, ...(extras.length ? { extras: [...extras] } : {}) };
+    const w: Workout = { id: crypto.randomUUID(), date: localDate(now), sessionId, startedAt: now, swaps: { ...swaps }, ...(extras.length ? { extras: [...extras] } : {}), ...(custom ? { custom } : {}) };
     await put('workouts', w);
     this.current = w;
     this.sets = [];
@@ -179,6 +179,15 @@ export class WorkoutStore {
     });
   }
 
+  /** A one-off workout from chosen exercises (not part of the plan). */
+  startCustom(name: string, items: NonNullable<Workout['custom']>['items'], now: number = Date.now()): Promise<Workout> {
+    return this.#run(async () => {
+      if (this.active) throw new Error('Finish the open workout first');
+      await this.#loadShared();
+      return this.#begin('CUSTOM', now, {}, [], { name, items });
+    });
+  }
+
   /** Same session and swaps as the most recent workout. */
   repeatLast(now: number = Date.now()): Promise<Workout> {
     return this.#run(async () => {
@@ -188,7 +197,7 @@ export class WorkoutStore {
       const last = all[0];
       if (!last) throw new Error('No workout to repeat yet');
       await this.#loadShared();
-      return this.#begin(last.sessionId, now, last.swaps, last.extras);
+      return this.#begin(last.sessionId, now, last.swaps, last.extras, last.custom);
     });
   }
 
@@ -355,7 +364,7 @@ export class WorkoutStore {
   plannedSets(): PlannedSet[] {
     const w = this.current;
     if (!w) return [];
-    const tpl = templateFor(w.sessionId);
+    const tpl = templateOf(w);
     if (!tpl) return [];
     const out: PlannedSet[] = [];
     const add = (exerciseId: string, sets: number) => {
@@ -572,7 +581,7 @@ export class WorkoutStore {
     return this.#run(async () => {
       const w = this.current;
       if (!w) throw new Error('No workout');
-      const tpl = templateFor(w.sessionId);
+      const tpl = templateOf(w);
       // Accept either the template's own id or the id currently in effect for that slot.
       const item =
         tpl?.items.find((i) => i.exerciseId === templateExerciseId) ??

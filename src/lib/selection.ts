@@ -1,3 +1,4 @@
+import { weekStart } from './stats';
 import type { Group, Plan, SessionId, SessionTemplate, Workout } from './types';
 
 const GROUP_ORDER: Group[] = ['CB', 'L', 'SA'];
@@ -44,10 +45,12 @@ export function nextSession(workouts: Workout[], templates: SessionTemplate[]): 
  * start. Workouts of sessions that are not in the plan (an older plan) are ignored. Which weekday it is does not
  * matter: a missed day never skips a session.
  */
-export function nextInPlan(plan: Plan, workouts: Workout[]): SessionId {
+export function nextInPlan(plan: Plan, workouts: Workout[], today?: string): SessionId {
   const sessions = plan.sessions;
+  // With `today`, each week starts again from the plan's first session (a new Monday = back to the start of the plan).
+  if (today) workouts = workouts.filter((w) => weekStart(w.date) === weekStart(today));
   if (sessions.length === 0) throw new Error('This plan has no sessions');
-  if (sessions.every((t) => t.group)) return nextSession(workouts, sessions);
+  if (sessions.every((t) => t.group)) return nextSession(workouts.filter((w) => w.sessionId !== 'CUSTOM'), sessions);
   let last: Workout | undefined;
   for (const w of workouts) {
     if (!sessions.some((t) => t.id === w.sessionId)) continue;

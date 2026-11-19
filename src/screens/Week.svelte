@@ -46,7 +46,7 @@
   // One gym visit counts once even if a long break split it into two workouts.
   const sessionsDone = $derived(visitKeysInWeek(workouts, sets, today).size);
 
-  interface Day { date: string; dom: number; label: string; letter: string; trained: boolean; future: boolean; isToday: boolean }
+  interface Day { date: string; dom: number; label: string; letter: string; trained: boolean; future: boolean; isToday: boolean; rest: boolean }
   const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   /** Eight week rows, oldest first: which days were trained, sessions done, PRs and hard sets that week. */
   const rows = $derived.by(() => {
@@ -61,6 +61,7 @@
           trained: trainedDays.has(date) && date <= today, // a future date with sets (typo, wrong clock) is not a trained day
           future: date > today,
           isToday: date === today,
+          rest: !!settings.restDays?.includes(date) && !trainedDays.has(date),
         };
       });
       const trained = days.filter((d) => d.trained);
@@ -147,7 +148,7 @@
                 onclick={() => openDay(c.date)}
               >{c.letter}</button>
             {:else}
-              <span class="dot" class:future={c.future} class:today={c.isToday} aria-label={c.label} role="img" data-date={c.date} data-trained="false">{c.letter}</span>
+              <span class="dot" class:future={c.future} class:today={c.isToday} class:rest={c.rest} aria-label={c.rest ? `${c.label}, rest day` : c.label} role="img" data-rest={c.rest} data-date={c.date} data-trained="false">{c.rest ? 'R' : c.letter}</span>
             {/if}
           {/each}
         </div>
@@ -203,6 +204,7 @@
   .dot.on { background: var(--blue); border-color: var(--blue); color: var(--on-blue); font-weight: 800; }
   .dot.today:not(.on) { border-color: var(--blue); color: var(--text); }
   .dot.future { opacity: 0.35; }
+  .dot.rest { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 800; }
   .wr { text-align: right; line-height: 1.15; }
   .wr b { font: 800 16px var(--display); font-variant-numeric: tabular-nums; }
   .wr b span { font: 500 11px var(--body); color: var(--muted); }
