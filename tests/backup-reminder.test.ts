@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { closeDb, put, saveSettings, DEFAULT_SETTINGS } from '../src/lib/db';
 import { workout } from '../src/lib/workout.svelte';
-import { backupStatus, lastBackupAt, lastBackupLabel, markBackedUp } from '../src/lib/backupReminder';
+import { backupStatus, backupTone, lastBackupAt, lastBackupLabel, markBackedUp } from '../src/lib/backupReminder';
 import Home from '../src/screens/Home.svelte';
 import Settings from '../src/screens/Settings.svelte';
 import type { SetLog } from '../src/lib/types';
@@ -70,6 +70,28 @@ afterEach(() => {
   cleanup();
 });
 
+describe('backupTone', () => {
+  const tone = (last: number | null, date: string) => backupTone(backupStatus([set(date)], last, NOW));
+  it('has no colour without history', () => expect(backupTone(backupStatus([], null, NOW))).toBeNull());
+  it('is green on the day of a backup and the day after, with a soft glow', () => {
+    expect(tone(NOW, '2026-10-01')).toEqual({ hue: 140, glow: expect.any(Number) });
+    expect(tone(NOW - DAY, '2026-10-01')!.hue).toBe(140);
+    expect(tone(NOW, '2026-10-01')!.glow).toBeLessThan(0.35);
+  });
+  it('turns amber at the due day, then red and glowing hard at twice that', () => {
+    expect(tone(NOW - 14 * DAY, '2026-09-01')!.hue).toBe(45);
+    expect(tone(NOW - 28 * DAY, '2026-09-01')).toEqual({ hue: 0, glow: 1 });
+    expect(tone(NOW - 60 * DAY, '2026-09-01')).toEqual({ hue: 0, glow: 1 });
+  });
+  it('shifts gradually in between, and sooner when never backed up (7 and 14 days)', () => {
+    const mid = tone(NOW - 7 * DAY, '2026-09-01')!;
+    expect(mid.hue).toBeGreaterThan(45);
+    expect(mid.hue).toBeLessThan(140);
+    expect(tone(null, '2026-11-12')!.hue).toBe(45);
+    expect(tone(null, '2026-11-05')!.hue).toBe(0);
+  });
+});
+
 describe('Home: backup "!"', () => {
   it('appears for someone with no Sheet whose backup is due, and opens Settings at the Backup card', async () => {
     await logOn('2026-11-05');
@@ -79,13 +101,26 @@ describe('Home: backup "!"', () => {
     expect(location.hash).toBe('#/settings');
     expect(sessionStorage.getItem('gym.focusBackup')).toBe('1');
   });
-  it('is hidden when the backup is recent, when there is no history, or when a Sheet is connected', async () => {
+  it('is green right after a backup, so it always shows the state', async () => {
     await logOn('2026-11-05');
-    markBackedUp(NOW - DAY);
+    markBackedUp(NOW);
+    render(Home);
+    const bang = await screen.findByRole('button', { name: /Back up your data\. Last backup: today/ });
+    expect(bang.style.getPropertyValue('--h')).toBe('140');
+    cleanup();
+    markBackedUp(NOW - 30 * DAY);
+    render(Home);
+    expect((await screen.findByRole('button', { name: /Back up your data/ })).style.getPropertyValue('--h')).toBe('0');
+    cleanup();
+  });
+  it('is hidden when there is no history or when a Sheet is connected', async () => {
+    localStorage.clear();
     render(Home);
     await screen.findByRole('button', { name: 'Settings' });
+    await new Promise((r) => setTimeout(r, 30));
     expect(screen.queryByRole('button', { name: /Back up your data/ })).toBeNull();
     cleanup();
+    await logOn('2026-11-05');
 
     localStorage.clear();
     await saveSettings({ ...DEFAULT_SETTINGS, scriptUrl: 'https://script.google.com/macros/s/X/exec', scriptKey: 'k' });

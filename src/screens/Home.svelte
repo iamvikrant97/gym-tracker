@@ -8,7 +8,7 @@
   import { nextInPlan, nextPlannedWorkout } from '../lib/selection';
   import { planHintDue, trainingDayNote } from '../lib/planSetup';
   import { workout, localDate, EXTRA_SETS } from '../lib/workout.svelte';
-  import { backupStatus, lastBackupAt, lastBackupLabel } from '../lib/backupReminder';
+  import { backupStatus, backupTone, lastBackupAt, lastBackupLabel } from '../lib/backupReminder';
   import { estimateMinutes } from '../lib/workoutView';
   import type { SessionId, SessionTemplate, SetLog, Settings, Workout } from '../lib/types';
   import Sheet from '../ui/Sheet.svelte';
@@ -48,6 +48,7 @@
 
   // People without a Sheet have one copy of their history, on this phone: a glowing "!" asks for a backup when it is due.
   const backup = $derived(!settings.scriptUrl ? backupStatus(sets, lastBackupAt(), now) : null);
+  const tone = $derived(backup ? backupTone(backup) : null);
   function openBackup() {
     try { sessionStorage.setItem('gym.focusBackup', '1'); } catch { /* no storage */ }
     location.hash = '#/settings';
@@ -212,8 +213,8 @@
   <div class="home-top">
     <span class="date">{dateLabel}</span>
     <span class="sync"><i class:warn={syncWarn}></i>{syncStatus}</span>
-    {#if backup?.due}
-      <button class="bk press" type="button" aria-label="Back up your data. {lastBackupLabel(backup.last, now)}" onclick={openBackup}>!</button>
+    {#if backup && tone}
+      <button class="bk press" type="button" style:--h={tone.hue} style:--g={tone.glow} aria-label="Back up your data. {lastBackupLabel(backup.last, now)}" onclick={openBackup}>!</button>
     {/if}
     <button class="gear press" type="button" aria-label="Settings" onclick={() => (location.hash = '#/settings')}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -306,10 +307,13 @@
   .sync { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
   .sync i { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
   .sync i.warn { background: var(--amber); }
-  .bk { margin-left: 8px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--amber); color: #1a1405; font: 800 16px/1 var(--display); animation: bkpulse 2s ease-out infinite; }
+  .bk { margin-left: 8px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: hsl(var(--h) 70% 52%); color: #101010; font: 800 16px/1 var(--display); animation: bkpulse 2.2s ease-in-out infinite; transition: background 0.4s; }
   .bk + .gear { margin-left: 0; }
-  @keyframes bkpulse { 0% { box-shadow: 0 0 0 0 rgba(242, 181, 68, 0.6); } 70%, 100% { box-shadow: 0 0 0 11px rgba(242, 181, 68, 0); } }
-  @media (prefers-reduced-motion: reduce) { .bk { animation: none; box-shadow: 0 0 0 4px rgba(242, 181, 68, 0.35); } }
+  @keyframes bkpulse {
+    0%, 100% { box-shadow: 0 0 calc(3px + 6px * var(--g)) calc(1px * var(--g)) hsl(var(--h) 80% 55% / calc(0.2 + 0.4 * var(--g))); }
+    50% { box-shadow: 0 0 calc(6px + 12px * var(--g)) calc(1px + 4px * var(--g)) hsl(var(--h) 80% 55% / calc(0.3 + 0.6 * var(--g))); }
+  }
+  @media (prefers-reduced-motion: reduce) { .bk { animation: none; box-shadow: 0 0 calc(4px + 8px * var(--g)) hsl(var(--h) 80% 55% / calc(0.3 + 0.4 * var(--g))); } }
   .gear { width: 48px; height: 48px; margin-right: -12px; display: grid; place-items: center; border-radius: 14px; color: var(--muted); }
   .gear svg { width: 22px; height: 22px; }
   .greet { font: 800 38px/1.05 var(--body); letter-spacing: -0.015em; margin: 16px 0 18px; text-wrap: balance; }

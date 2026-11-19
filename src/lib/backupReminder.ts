@@ -51,3 +51,19 @@ export function lastBackupLabel(last: number | null, now: number): string {
   const when = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago (${d.getDate()} ${MONTHS[d.getMonth()]})`;
   return `Last backup: ${when}`;
 }
+
+export interface BackupTone {
+  /** HSL hue: 140 green, 45 amber, 0 red. */
+  hue: number;
+  /** 0..1: how strongly the "!" glows. */
+  glow: number;
+}
+
+/** Colour of the Home "!": green when freshly backed up, shifting to amber at the due day and to red at twice that. */
+export function backupTone(b: BackupStatus): BackupTone | null {
+  if (b.days === null) return null;
+  const due = b.last ? REPEAT_DUE_DAYS : FIRST_DUE_DAYS;
+  const d = Math.min(Math.max(b.days, 0), due * 2);
+  const hue = d <= 1 ? 140 : d <= due ? 140 - ((d - 1) / (due - 1)) * 95 : 45 - ((d - due) / due) * 45;
+  return { hue: Math.round(hue), glow: Math.round((0.25 + 0.75 * (d / (due * 2))) * 100) / 100 };
+}
