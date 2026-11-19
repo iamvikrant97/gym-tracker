@@ -60,14 +60,14 @@ describe('Workout screen', () => {
     const { card, container } = await open();
     expect(screen.getByRole('heading', { name: 'Chest + Back B' })).toBeTruthy();
     expect(within(card).getByText('10–15 reps · rest 3:00 · steps of 2.5 kg')).toBeTruthy();
-    expect(container.querySelectorAll('.seg')).toHaveLength(16);
+    expect(container.querySelectorAll('.pl')).toHaveLength(12); // six plates a side
     expect(screen.getByTestId('meter-label').textContent).toMatch(/0 of 16 sets/);
 
     await fireEvent.click(within(card).getByRole('button', { name: 'Complete set 1' }));
     await waitFor(() => expect(incline()).toHaveLength(1));
     expect(incline()[0]).toMatchObject({ kg: 10, reps: 9, setNo: 1, warmup: false });
     await waitFor(() => expect(screen.getByTestId('meter-label').textContent).toMatch(/1 of 16 sets/));
-    expect(container.querySelectorAll('.seg.on')).toHaveLength(1);
+    expect(container.querySelectorAll('.pl.off')).toHaveLength(12); // 1 of 16 sets: no plate yet
     expect(workout.restEndsAt).toBe(NOW + 180_000);
     expect(toasts.message).toBe('New PR · Smith incline press');
     expect(rowsOf(card)[0].classList.contains('done')).toBe(true);

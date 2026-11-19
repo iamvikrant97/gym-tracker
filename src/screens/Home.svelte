@@ -3,7 +3,7 @@
   import { greetingFor } from '../lib/greeting';
   import { currentPlan, exerciseById, templateFor, templateOf } from '../lib/seed';
   import { BUILDER_MUSCLES, buildCustom, customName, isRestDay, recommend } from '../lib/flex';
-  import { dayVisits, homeNotes, visitKey, visitKeysInWeek, weekStart } from '../lib/stats';
+  import { dayVisits, homeNotes, templateColor, visitKey, visitKeysInWeek, weekStart } from '../lib/stats';
   import { showToast } from '../ui/toast.svelte';
   import { onMount } from 'svelte';
   import { nextInPlan, nextPlannedWorkout } from '../lib/selection';
@@ -99,6 +99,7 @@
   );
   const resumingEmpty = $derived(resuming && workout.sets.length === 0);
   const template = $derived(templateFor(sessionId) ?? planNow.sessions[0]);
+  const accent = $derived(templateColor(template.name, template.items.map((i) => lookup(i.exerciseId)?.muscle)));
 
   const effectiveId = (t: SessionTemplate, templateId: string) =>
     (following ? workout.current?.swaps[templateId] : undefined) ?? settings.templateOverrides[t.id]?.[templateId] ?? templateId;
@@ -342,7 +343,7 @@
         </button>
       </aside>
     {/if}
-    <article class="today">
+    <article class="today glow" style:--c={accent}>
       <div class="lbl">Today · session {sessionNo} of {settings.weeklyTarget}</div>
       <h2>{template.name}</h2>
       <div class="meta">{plan.setCount} sets · about {plan.minutes} min</div>
@@ -446,6 +447,16 @@
   .gear svg { width: 22px; height: 22px; }
   .greet { font: 800 38px/1.05 var(--body); letter-spacing: -0.015em; margin: 16px 0 18px; text-wrap: balance; }
   .today { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
+  .today.glow { position: relative; overflow: hidden; border-color: color-mix(in srgb, var(--c) 40%, var(--line)); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 28%, var(--surface)), var(--surface) 72%); animation: glow-in 480ms var(--ease-out) both; }
+  .today.glow::before { content: ''; position: absolute; inset: -45%; background: radial-gradient(circle at 30% 35%, color-mix(in srgb, var(--c) 45%, transparent), transparent 52%); opacity: 0.45; animation: glow-drift 8s ease-in-out infinite alternate; pointer-events: none; }
+  .today.glow::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.14) 50%, transparent 62%); transform: translateX(-130%); animation: glow-shine 1.3s 300ms var(--ease-out) 1 forwards; pointer-events: none; }
+  .today.glow > * { position: relative; z-index: 1; }
+  .today.glow .ex-list li b { color: var(--c); }
+  .today.glow .start { background: var(--c); }
+  @keyframes glow-in { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes glow-drift { from { transform: translate(-6%, -4%) scale(1); } to { transform: translate(10%, 8%) scale(1.15); } }
+  @keyframes glow-shine { to { transform: translateX(130%); } }
+  @media (prefers-reduced-motion: reduce) { .today.glow, .today.glow::before, .today.glow::after { animation: none; } }
   .lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
   h2 { font: 800 32px/1.05 var(--body); letter-spacing: -0.02em; margin: 8px 0 4px; }
   .meta { font-size: 13px; color: var(--muted); }

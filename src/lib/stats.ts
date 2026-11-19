@@ -204,6 +204,11 @@ export function sessionColor(name: string, muscles: Muscle[]): string {
   return top[1] === 0 ? TONE.blue : TONE[top[0]];
 }
 
+/** Accent colour of a session template, from its name and the main muscles of its exercises. */
+export function templateColor(name: string, muscles: (Muscle | undefined)[]): string {
+  return sessionColor(name, muscles.filter((m): m is Muscle => !!m));
+}
+
 export interface DayVisit {
   key: string;
   /** Accent colour of the session (see sessionColor). */

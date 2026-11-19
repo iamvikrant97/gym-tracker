@@ -3,6 +3,7 @@
   import { workout, UNDO_MS } from '../lib/workout.svelte';
   import { exerciseById, rangeFor, sessionName, templateOf } from '../lib/seed';
   import { addWeightDue, isPR } from '../lib/progression';
+  import { templateColor } from '../lib/stats';
   import { buildCards, finishAt, fmtClock, fmtElapsed, fmtKg, fmtTime, meter, nextUp, remaining, round2 } from '../lib/workoutView';
   import { buzz } from '../lib/device';
   import { showToast } from '../ui/toast.svelte';
@@ -29,9 +30,13 @@
 
   const w = $derived(workout.current);
   const template = $derived(w ? templateOf(w) : undefined);
+  const accent = $derived(template ? templateColor(template.name, template.items.map((i) => exerciseById(i.exerciseId)?.muscle ?? workout.exercise(i.exerciseId)?.muscle)) : '#4c8dff');
   const planned = $derived(w ? workout.plannedSets() : []);
   const cards = $derived(buildCards(planned, workout.sets));
   const progress = $derived(meter(cards));
+  // Six plates load onto the bar as sets are finished; the last one lands with the final set.
+  const PLATES: [number, number][] = [[110, 22], [94, 20], [80, 18], [68, 16], [58, 14], [50, 12]];
+  const plates = $derived(progress.total ? Math.min(6, Math.floor((progress.done / progress.total) * 6)) : 0);
   const next = $derived(nextUp(cards));
 
   function prFor(ex: Exercise, s: SetLog): boolean {
@@ -347,7 +352,7 @@
   </section>
 {:else}
   <section class="screen">
-    <header class="top">
+    <header class="top" style:--c={accent}>
       <div class="row">
         <button class="back" type="button" aria-label="Back to Today" onclick={() => (location.hash = '#/')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
@@ -358,9 +363,13 @@
           <span>{workout.active ? `Finish ≈ ${finishLabel}` : 'Ended'}</span>
         </div>
       </div>
-      <div class="meter" aria-hidden="true">
-        {#each Array.from({ length: progress.total }) as _, i (i)}<span class="seg" class:on={i < progress.done}></span>{/each}
-      </div>
+      <svg class="bar" viewBox="0 0 468 120" aria-hidden="true">
+        <rect x="10" y="54" width="448" height="12" rx="6" fill="#8b93a3" />
+        {#each PLATES as pl, i (i)}
+          <rect class="pl" class:off={i >= plates} style:--x="-40px" style:transition-delay="{i * 50}ms" x={118 - i * 24} y={60 - pl[0] / 2} width={pl[1]} height={pl[0]} rx="6" fill="var(--c, var(--blue))" opacity={1 - i * 0.08} />
+          <rect class="pl" class:off={i >= plates} style:--x="40px" style:transition-delay="{i * 50}ms" x={350 + i * 24 - 8 + 8} y={60 - pl[0] / 2} width={pl[1]} height={pl[0]} rx="6" fill="var(--c, var(--blue))" opacity={1 - i * 0.08} />
+        {/each}
+      </svg>
       <div class="meter-label" data-testid="meter-label">
         <span><strong>{progress.done}</strong> of {progress.total} sets</span>
         <span>{progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%</span>
@@ -487,7 +496,7 @@
 <style>
   .top {
     position: sticky; top: 0; z-index: 5; margin: 0 -16px; padding: 12px 16px;
-    background: rgba(11, 13, 17, 0.8); backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c, #4c8dff) 16%, rgba(11, 13, 17, 0.85)), rgba(11, 13, 17, 0.8)); backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
   }
   .row { display: flex; align-items: center; gap: 12px; }
   .back { width: 48px; height: 48px; margin-left: -12px; display: grid; place-items: center; border-radius: 12px; flex: none; }
@@ -496,13 +505,9 @@
   .clock { margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
   .clock b { display: block; font: 600 20px/1 var(--display); }
   .clock span { font-size: 11px; color: var(--muted); white-space: nowrap; }
-  .meter { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; margin-top: 12px; height: 6px; }
-  .seg { border-radius: 2px; background: var(--line); position: relative; overflow: hidden; }
-  .seg::after {
-    content: ''; position: absolute; inset: 0; background: var(--blue); transform: scaleX(0); transform-origin: left;
-    transition: transform 320ms var(--ease-out);
-  }
-  .seg.on::after { transform: scaleX(1); }
+  .bar { display: block; width: 100%; height: auto; max-height: 64px; margin-top: 8px; }
+  .pl { transform-box: fill-box; transform-origin: center; transition: opacity 320ms var(--ease-out), transform 420ms var(--ease-out); }
+  .pl.off { opacity: 0; transform: translateX(var(--x)); }
   .meter-label { display: flex; justify-content: space-between; margin-top: 7px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .meter-label strong { color: var(--text); }
   .ended { margin: 12px 2px 0; font-size: 13px; color: var(--muted); }
@@ -554,8 +559,7 @@
   .undo button { margin-left: auto; height: 48px; padding: 0 18px; border-radius: 11px; background: var(--blue); color: var(--on-blue); font-weight: 600; }
   @keyframes drop { from { transform: translate(-50%, -140%); } }
   @media (prefers-reduced-motion: reduce) {
-    .seg::after { transform: none; opacity: 0; transition: opacity 200ms ease; }
-    .seg.on::after { opacity: 1; }
+    .pl, .pl.off { transform: none; transition: opacity 200ms ease; }
     .ex-name { transition: opacity 180ms ease; }
     .ex-name.swapping { filter: none; }
     .undo { animation: fade 200ms ease; }
