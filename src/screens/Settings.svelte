@@ -388,6 +388,7 @@
         <li>Open Spotify and play any song once. After that the music bar here can play, pause and skip.</li>
       </ol>
       <p class="hint">The Redirect URI below is only for whoever owns the Client ID. Friends don't need to touch it. Don't use music control? Skip this whole section; the rest of the app works without it.</p>
+      <p class="hint"><strong>Other music players</strong> (YouTube Music, Apple Music and more) are planned for a future update. Want one sooner? Tell us in Feedback below.</p>
     </details>
     <label class="field">Client ID
       <input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" bind:value={clientId} onchange={saveClientId} />
@@ -524,7 +525,7 @@
   <!-- Feedback -->
   <article class="card" aria-label="Feedback">
     <h2>Feedback</h2>
-    <p class="hint">Something to change, or not working? Write it here and it goes straight to the app's maker.</p>
+    <p class="hint">Have an idea, an improvement, or something not working? Type it here and tap Send. It goes straight to the app's maker.</p>
     <textarea class="fb" aria-label="Your feedback" rows="4" maxlength={FEEDBACK_MAX} placeholder="What would make this better?" bind:value={feedback}></textarea>
     <button class="secondary wide press" type="button" disabled={!feedback.trim() || sendingFb} onclick={sendFb}>{sendingFb ? 'Sending…' : 'Send feedback'}</button>
   </article>

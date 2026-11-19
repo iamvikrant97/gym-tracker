@@ -133,6 +133,7 @@ describe('Settings screen', () => {
     expect(how.textContent).toContain('Client ID');
     expect(how.textContent).toContain('add your Spotify email');
     expect(how.textContent).toContain('play any song once');
+    expect(how.textContent).toContain('planned for a future update');
   });
 
   it('saves weekly target, body weight and pause', async () => {
