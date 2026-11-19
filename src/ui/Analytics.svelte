@@ -240,12 +240,13 @@
   .d { font-size: 11.5px; margin-top: 3px; color: #7fb0ff; line-height: 1.3; } .d.flat { color: #8c94a3; }
   .warn .v { color: #f2b544; }
   .meter { height: 5px; border-radius: 3px; background: #1f2530; margin-top: 8px; overflow: hidden; }
-  .meter i { display: block; height: 100%; width: 100%; background: #4c8dff; border-radius: 3px; transform-origin: left; transform: scaleX(var(--w)); animation: grow 900ms var(--out) 250ms both; --to: var(--w); }
+  .meter i { display: block; height: 100%; width: 100%; background: var(--c, #4c8dff); border-radius: 3px; transform-origin: left; transform: scaleX(var(--w)); animation: grow 900ms var(--out) 250ms both; --to: var(--w); }
   .tabs { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); background: #13161c; border: 1px solid #242934; border-radius: 14px; padding: 3px; margin-bottom: 14px; }
-  .pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 4); border-radius: 11px; background: #16305c; box-shadow: inset 0 0 0 1px #4c8dff; transform: translateX(calc(var(--n) * 100%)); transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1); }
+  .pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 4); border-radius: 11px; background: color-mix(in srgb, var(--c, #4c8dff) 28%, #0b0d11); box-shadow: inset 0 0 0 1px var(--c, #4c8dff); transform: translateX(calc(var(--n) * 100%)); transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1); }
   .tabs button { position: relative; min-height: 44px; background: none; border: 0; color: #8c94a3; font-weight: 600; font-size: 13px; transition: color 200ms; }
   .tabs button[aria-selected='true'] { color: #dce7ff; }
-  .card { background: #13161c; border: 1px solid #242934; border-radius: 18px; padding: 16px; margin-bottom: 14px; }
+  .card { position: relative; overflow: hidden; background: #13161c; border: 1px solid #242934; border-radius: 18px; padding: 16px; margin-bottom: 14px; }
+  .card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--c, #4c8dff), transparent); opacity: 0.8; }
   .cap { margin: 0; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #8c94a3; }
   h2 { margin: 4px 0 10px; font: 800 20px/1.2 var(--display); }
   svg { display: block; width: 100%; height: auto; }

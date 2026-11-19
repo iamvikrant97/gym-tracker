@@ -19,9 +19,10 @@
   import { DEFAULT_SETTINGS, getAll, loadSettings } from '../lib/db';
   import { listExercises } from '../lib/db';
   import { addWeightDue } from '../lib/progression';
-  import { exerciseById } from '../lib/seed';
-  import { muscleTrend, setsPerWeek, weekStart } from '../lib/stats';
-  import type { Exercise, Muscle, Settings } from '../lib/types';
+  import { currentPlan, exerciseById, templateFor, templateOf } from '../lib/seed';
+  import { nextInPlan } from '../lib/selection';
+  import { muscleTrend, setsPerWeek, templateColor, weekStart } from '../lib/stats';
+  import type { Exercise, Muscle, Settings, Workout } from '../lib/types';
   import { workout, localDate } from '../lib/workout.svelte';
   import AddExerciseForm from '../ui/AddExerciseForm.svelte';
   import Analytics from '../ui/Analytics.svelte';
@@ -45,6 +46,7 @@
   let sets = $state.raw<SetLog[]>([]);
   let library = $state.raw<Exercise[]>([]);
   let settings = $state.raw<Settings>(DEFAULT_SETTINGS);
+  let workouts = $state.raw<Workout[]>([]);
   let muscleSheet = $state<Muscle | null>(null);
   let exerciseSheet = $state<string | null>(null);
   let addFor = $state<Muscle | null>(null);
@@ -56,7 +58,8 @@
 
   async function load() {
     try {
-      const [all, lib, s] = await Promise.all([getAll<SetLog>('sets'), listExercises(), loadSettings()]);
+      const [all, lib, s, ws] = await Promise.all([getAll<SetLog>('sets'), listExercises(), loadSettings(), getAll<Workout>('workouts')]);
+      workouts = ws;
       sets = all.filter((x) => !x.deleted);
       library = lib;
       settings = s;
@@ -138,6 +141,18 @@
     }
     return out;
   }
+  // The header takes the colour and muscles of today's session (the one running, else the next in the plan).
+  const todays = $derived.by(() => {
+    const cur = workout.active ? workout.current : undefined;
+    let t = cur ? templateOf(cur) : undefined;
+    if (!t) {
+      const withSets = new Set(sets.filter((x) => !x.warmup).map((x) => x.workoutId));
+      const plan = currentPlan();
+      t = templateFor(nextInPlan(plan, workouts.filter((w) => withSets.has(w.id)), today)) ?? plan.sessions[0];
+    }
+    const muscles = [...new Set(t.items.map((i) => lookup(i.exerciseId)?.muscle).filter((m): m is Muscle => !!m))];
+    return { name: t.name, color: templateColor(t.name, muscles), muscles: muscles.slice(0, 4) };
+  });
   const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
   const sheetRow = $derived(rows.find((r) => r.muscle === sheetMuscle));
@@ -164,8 +179,13 @@
   }
 </script>
 
-<section class="screen">
-  <h1 class="page-title">Progress</h1>
+<section class="screen" style:--c={todays.color}>
+  <header class="phero">
+    <span class="tb"></span>
+    <h1>Progress</h1>
+    <div class="sub">Today · {todays.name}</div>
+    <div class="chips">{#each todays.muscles as m, i (m)}<span style:--k={i}>{m}</span>{/each}</div>
+  </header>
   <Analytics {sets} {today} target={settings.weeklyTarget ?? 6} {lookup} />
   <div class="seg-ctl" role="tablist" aria-label="Progress view">
     <button type="button" role="tab" aria-selected={view === 'muscles'} onclick={() => (view = 'muscles')}>Muscles</button>
@@ -258,6 +278,21 @@
 </Sheet>
 
 <style>
+  .phero { position: relative; overflow: hidden; padding: 16px; margin: 20px 0 14px; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--c) 40%, var(--line)); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 28%, #0f1218), #0f1218 70%); }
+  .phero > * { position: relative; z-index: 1; }
+  .phero::before { content: ''; position: absolute; inset: -45%; background: radial-gradient(circle at 30% 35%, color-mix(in srgb, var(--c) 50%, transparent), transparent 52%); opacity: 0.5; animation: ph-drift 8s ease-in-out infinite alternate; pointer-events: none; }
+  .phero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.18) 50%, transparent 62%); transform: translateX(-130%); animation: ph-shine 1.2s 300ms var(--ease-out) 1 forwards; pointer-events: none; }
+  .phero .tb { position: absolute; left: 0; top: 0; height: 3px; width: 100%; background: var(--c); transform-origin: left; transform: scaleX(0); animation: ph-bar 700ms 100ms var(--ease-out) forwards; z-index: 2; }
+  .phero h1 { margin: 0; font: 800 36px/1 var(--body); letter-spacing: -0.02em; animation: ph-rise 550ms 120ms var(--ease-out) both; }
+  .phero .sub { color: #c3cbd9; font-size: 13px; margin: 6px 0 10px; animation: ph-rise 550ms 200ms var(--ease-out) both; }
+  .phero .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .phero .chips span { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); animation: ph-chip 400ms var(--ease-out) both; animation-delay: calc(280ms + var(--k, 0) * 70ms); }
+  @keyframes ph-drift { from { transform: translate(-6%, -4%) scale(1); } to { transform: translate(10%, 8%) scale(1.15); } }
+  @keyframes ph-shine { to { transform: translateX(130%); } }
+  @keyframes ph-bar { to { transform: scaleX(1); } }
+  @keyframes ph-rise { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
+  @keyframes ph-chip { from { opacity: 0; transform: scale(0.8) translateY(4px); } }
+  @media (prefers-reduced-motion: reduce) { .phero::before, .phero::after, .phero .tb, .phero h1, .phero .sub, .phero .chips span { animation: none; } .phero .tb { transform: none; } .phero::after { display: none; } }
   .small { font-size: 12.5px; margin: 0 0 6px; }
   .seg-ctl { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 3px; margin-bottom: 16px; }
   .seg-ctl button { height: 48px; border-radius: 9px; font-size: 14px; color: var(--muted); transition: background 200ms var(--ease-out), color 200ms var(--ease-out); }
