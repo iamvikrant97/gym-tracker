@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Splash from './ui/Splash.svelte';
   import type { Component } from 'svelte';
   import { onMount } from 'svelte';
   import Library from './screens/Library.svelte';
@@ -118,6 +119,7 @@
 
 <svelte:window onhashchange={() => (route = parseRoute(location.hash))} />
 
+<Splash />
 <main data-route={route}>
   {#if gate === 'loading'}
     <!-- the stored plan is being read -->
