@@ -36,6 +36,15 @@
   const progress = $derived(meter(cards));
   // Six plates load onto the bar as sets are finished; the last one lands with the final set.
   const PLATES: [number, number][] = [[110, 22], [94, 20], [80, 18], [68, 16], [58, 14], [50, 12]];
+  // A soft pulse on the bar each time a set is finished.
+  let pulse = $state(false);
+  let lastDone = 0;
+  $effect(() => {
+    const d = progress.done;
+    if (d > lastDone && lastDone >= 0) { pulse = true; const t = setTimeout(() => (pulse = false), 700); lastDone = d; return () => clearTimeout(t); }
+    lastDone = d;
+  });
+  const pct = $derived(progress.total ? Math.min(100, (progress.done / progress.total) * 100) : 0);
   const plates = $derived(progress.total ? Math.min(6, Math.floor((progress.done / progress.total) * 6)) : 0);
   const next = $derived(nextUp(cards));
 
@@ -363,13 +372,14 @@
           <span>{workout.active ? `Finish ≈ ${finishLabel}` : 'Ended'}</span>
         </div>
       </div>
-      <svg class="bar" viewBox="0 0 468 120" aria-hidden="true">
+      <svg class="bar" class:pulse viewBox="0 0 468 120" aria-hidden="true">
         <rect x="10" y="54" width="448" height="12" rx="6" fill="#8b93a3" />
         {#each PLATES as pl, i (i)}
           <rect class="pl" class:off={i >= plates} style:--x="-40px" style:transition-delay="{i * 50}ms" x={118 - i * 24} y={60 - pl[0] / 2} width={pl[1]} height={pl[0]} rx="6" fill="var(--c, var(--blue))" opacity={1 - i * 0.08} />
           <rect class="pl" class:off={i >= plates} style:--x="40px" style:transition-delay="{i * 50}ms" x={350 + i * 24 - 8 + 8} y={60 - pl[0] / 2} width={pl[1]} height={pl[0]} rx="6" fill="var(--c, var(--blue))" opacity={1 - i * 0.08} />
         {/each}
       </svg>
+      <div class="track" aria-hidden="true"><i style:width="{pct}%"></i></div>
       <div class="meter-label" data-testid="meter-label">
         <span><strong>{progress.done}</strong> of {progress.total} sets</span>
         <span>{progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%</span>
@@ -507,6 +517,12 @@
   .clock span { font-size: 11px; color: var(--muted); white-space: nowrap; }
   .bar { display: block; width: 100%; height: auto; max-height: 64px; margin-top: 8px; }
   .pl { transform-box: fill-box; transform-origin: center; transition: opacity 320ms var(--ease-out), transform 420ms var(--ease-out); }
+  .bar.pulse { animation: bar-pulse 700ms var(--ease-out); }
+  @keyframes bar-pulse { 0% { filter: drop-shadow(0 0 0 transparent); } 35% { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--c, var(--blue)) 70%, transparent)); } 100% { filter: drop-shadow(0 0 0 transparent); } }
+  .track { height: 3px; margin-top: 6px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 2px; position: relative; overflow: hidden; background: var(--c, var(--blue)); transition: width 480ms var(--ease-out); }
+  .track i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent); transform: translateX(-100%); animation: track-shine 2.6s ease-in-out infinite; }
+  @keyframes track-shine { to { transform: translateX(100%); } }
   .pl.off { opacity: 0; transform: translateX(var(--x)); }
   .meter-label { display: flex; justify-content: space-between; margin-top: 7px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .meter-label strong { color: var(--text); }
@@ -559,6 +575,7 @@
   .undo button { margin-left: auto; height: 48px; padding: 0 18px; border-radius: 11px; background: var(--blue); color: var(--on-blue); font-weight: 600; }
   @keyframes drop { from { transform: translate(-50%, -140%); } }
   @media (prefers-reduced-motion: reduce) {
+    .bar.pulse, .track i::after { animation: none; }
     .pl, .pl.off { transform: none; transition: opacity 200ms ease; }
     .ex-name { transition: opacity 180ms ease; }
     .ex-name.swapping { filter: none; }
