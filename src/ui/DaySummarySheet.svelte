@@ -36,7 +36,7 @@
     </div>
   {/if}
   {#each visits as v (v.key)}
-    <div class="visit" data-testid="day-workout">
+    <div class="visit" data-testid="day-workout" data-flip>
       <h3>{v.name}</h3>
       {#if v.muscles.length}<div class="chips">{#each v.muscles.slice(0, 5) as m (m)}<span>{m}</span>{/each}</div>{/if}
       <dl class="figs">
@@ -48,9 +48,9 @@
         <p class="vs" data-testid="day-improved"><b>{v.improved} of {compared(v)}</b> lifts beat last time</p>
       {/if}
       <ul class="exs">
-        {#each v.exercises as ex (ex.exerciseId)}
+        {#each v.exercises as ex, ei (ex.exerciseId)}
           {@const c = change(ex)}
-          <li>
+          <li style:--i={ei}>
             <div class="top">
               <span class="en">{ex.name}{#if ex.pr}<span class="pr">PR</span>{/if}</span>
               <span class="chg {c.tone}">{c.text}</span>
@@ -64,6 +64,17 @@
 </Sheet>
 
 <style>
+  /* Opening a day, or flipping to an older or newer one, slides the new workout in; cards follow one by one. */
+  .visit { animation: vin 320ms var(--ease-out) both; }
+  .exs li { animation: vin 380ms var(--ease-out) both; animation-delay: calc(120ms + var(--i) * 55ms); }
+  .figs > div.gold { animation: vin 320ms var(--ease-out) both, goldglow 1100ms var(--ease-out) 350ms both; }
+  .chg.up { animation: chgin 420ms var(--ease-out) both; animation-delay: calc(260ms + var(--i, 0) * 55ms); }
+  .pr { animation: prpop 460ms var(--ease-out) both; animation-delay: 300ms; }
+  @keyframes vin { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes chgin { from { opacity: 0; transform: translateX(-6px); } }
+  @keyframes prpop { from { opacity: 0; transform: scale(0.4) rotate(-8deg); } 65% { transform: scale(1.12); } }
+  @keyframes goldglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(242, 181, 68, 0); } 40% { box-shadow: 0 0 18px 1px rgba(242, 181, 68, 0.45); } }
+  @media (prefers-reduced-motion: reduce) { .visit, .exs li, .figs > div.gold, .chg.up, .pr { animation: none; } }
   .nav { display: flex; gap: 8px; margin-bottom: 12px; }
   .step { flex: 1; min-height: 44px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
   .step:disabled { opacity: 0.35; }

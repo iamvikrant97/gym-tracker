@@ -130,11 +130,11 @@
 
   <h2 class="cal-title">Last 8 weeks</h2>
   <div class="rows" role="grid" aria-label="Training days, last 8 weeks">
-    {#each rows as r (r.start)}
-      <div class="wk" class:cur={r.current} role="row">
+    {#each rows as r, ri (r.start)}
+      <div class="wk" class:cur={r.current} role="row" style:--i={ri}>
         <span class="wl">{r.current ? 'This week' : r.label}</span>
         <div class="dots">
-          {#each r.days as c (c.date)}
+          {#each r.days as c, di (c.date)}
             {#if c.trained}
               <button
                 type="button"
@@ -143,6 +143,7 @@
                 aria-label="{c.label}, trained, view summary"
                 data-date={c.date}
                 data-trained="true"
+                style:--d={di}
                 onclick={() => openDay(c.date)}
               >{c.letter}</button>
             {:else}
@@ -184,6 +185,14 @@
 
   .cal-title { font: 600 12px/1 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 28px 0 10px; }
   .rows { display: grid; }
+  /* Rows rise in one after another, trained dots pop in along the row, and the target turns green with a short flash. */
+  .wk { animation: wkin 420ms var(--ease-out) both; animation-delay: calc(var(--i) * 45ms); }
+  .dot.on { animation: dotpop 380ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms + var(--d, 0) * 28ms + 120ms); }
+  .wr b.hit { animation: hitflash 900ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms + 300ms); }
+  @keyframes wkin { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes dotpop { from { opacity: 0; transform: scale(0.5); } 60% { transform: scale(1.08); } }
+  @keyframes hitflash { 0% { text-shadow: 0 0 0 transparent; } 40% { text-shadow: 0 0 12px rgba(30, 215, 96, 0.7); } 100% { text-shadow: 0 0 0 transparent; } }
+  @media (prefers-reduced-motion: reduce) { .wk, .dot.on, .wr b.hit { animation: none; } }
   .wk { display: grid; grid-template-columns: 50px minmax(0, 1fr) 46px; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); }
   .wl { font-size: 11.5px; color: var(--muted); line-height: 1.2; }
   .wk.cur .wl { color: var(--text); font-weight: 600; }
