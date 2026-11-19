@@ -101,12 +101,16 @@ describe('Home: backup "!"', () => {
     expect(location.hash).toBe('#/settings');
     expect(sessionStorage.getItem('gym.focusBackup')).toBe('1');
   });
-  it('is green right after a backup, so it always shows the state', async () => {
+  it('goes away right after a backup, then comes back green-to-red as days pass', async () => {
     await logOn('2026-11-05');
     markBackedUp(NOW);
     render(Home);
-    const bang = await screen.findByRole('button', { name: /Back up your data\. Last backup: today/ });
-    expect(bang.style.getPropertyValue('--h')).toBe('140');
+    await screen.findByRole('button', { name: 'Settings' });
+    expect(screen.queryByRole('button', { name: /Back up your data/ })).toBeNull();
+    cleanup();
+    markBackedUp(NOW - 3 * DAY);
+    render(Home);
+    expect((await screen.findByRole('button', { name: /Back up your data/ })).style.getPropertyValue('--h')).toBe('125');
     cleanup();
     markBackedUp(NOW - 30 * DAY);
     render(Home);

@@ -29,11 +29,8 @@ export async function exportAll(now: number = Date.now()): Promise<Backup> {
   return { app: BACKUP_APP, format: BACKUP_FORMAT, exportedAt: new Date(now).toISOString(), sets, workouts, customExercises, settings: safe };
 }
 
-export const backupFileName = (now: number = Date.now()) => {
-  const d = new Date(now);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `gym-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
-};
+/** One fixed name: every backup holds all the history, so only the latest file matters (the phone adds "(1)" if the old one is still there). */
+export const backupFileName = () => 'gym-backup.json';
 
 export interface RestoreResult { sets: number; workouts: number; exercises: number; /** new `import-` sets skipped because the Sheet's own copy is already here */ skipped: number }
 
