@@ -245,7 +245,7 @@
     {#if tn === 'main'}
       <path d={lens(o)} class="mus-bloom" style:opacity={0.25 + 0.4 * sk.glow} filter="url(#blur3)" />
     {/if}
-    <path d={lens(o)} class="mus {tn}" style="--g:{tn === 'main' ? Math.round((0.35 + 0.65 * sk.glow) * 100) : 100}%" />
+    <path d={lens(o)} class="mus {tn}" style:--g="{tn === 'main' ? Math.round((0.35 + 0.65 * sk.glow) * 100) : 100}%" />
   {/each}
 {/snippet}
 

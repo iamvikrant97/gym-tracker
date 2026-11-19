@@ -62,8 +62,8 @@
   {:else if anim === 'legPress' || anim === 'legPressHigh' || anim === 'legPressCalf'}
     <line x1="100" y1="132" x2="196" y2="58" class="gear-leg" />
     <line x1="97" y1="124" x2="48" y2="84" class="gear-pad" />
-    <line x1={sk.ankle.x + 6} y1={sk.ankle.y + 4} x2={sk.ankle.x + 6 + 0.616 * 30} y2={sk.ankle.y + 4 + 0.788 * 30} class="gear-pad" style="stroke-width:5" />
-    <line x1={sk.ankle.x + 6} y1={sk.ankle.y + 4} x2={sk.ankle.x + 6 - 0.616 * 30} y2={sk.ankle.y + 4 - 0.788 * 30} class="gear-pad" style="stroke-width:5" />
+    <line x1={sk.ankle.x + 6} y1={sk.ankle.y + 4} x2={sk.ankle.x + 6 + 0.616 * 30} y2={sk.ankle.y + 4 + 0.788 * 30} class="gear-pad" style:stroke-width="5" />
+    <line x1={sk.ankle.x + 6} y1={sk.ankle.y + 4} x2={sk.ankle.x + 6 - 0.616 * 30} y2={sk.ankle.y + 4 - 0.788 * 30} class="gear-pad" style:stroke-width="5" />
     <rect class="gear dark" x="90" y="136" width="8" height={FLOOR - 136} />
     <rect class="gear dark" x="178" y="100" width="8" height={FLOOR - 100} />
   {:else if anim === 'legExt'}
@@ -71,7 +71,7 @@
     <rect class="gear dark" x="96" y="126" width="8" height={FLOOR - 126} />
     <line x1="92" y1="118" x2="87" y2="62" class="gear-pad" />
     <rect class="gear dark" x="128" y="130" width="8" height={FLOOR - 130} />
-    <line x1={sk.ankle.x - 6} y1={sk.ankle.y - 2} x2={sk.ankle.x + 2} y2={sk.ankle.y - 2} class="gear-pad" style="stroke-width:6" />
+    <line x1={sk.ankle.x - 6} y1={sk.ankle.y - 2} x2={sk.ankle.x + 2} y2={sk.ankle.y - 2} class="gear-pad" style:stroke-width="6" />
   {:else if anim === 'smithSquat'}
     <rect class="gear dark" x="118" y="0" width="6" height={FLOOR} rx="2" />
     <rect class="gear dark" x="100" y="148" width="42" height="8" rx="3" />
@@ -79,14 +79,14 @@
     <rect class="gear dark" x="74" y="123" width="44" height="8" rx="4" />
     <rect class="gear dark" x="92" y="130" width="8" height={FLOOR - 130} />
     <line x1="88" y1="122" x2="83" y2="62" class="gear-pad" />
-    <line x1="108" y1="106" x2="140" y2="106" class="gear-pad" style="stroke-width:7" />
+    <line x1="108" y1="106" x2="140" y2="106" class="gear-pad" style:stroke-width="7" />
     <rect class="gear dark" x="148" y="134" width="8" height={FLOOR - 134} />
-    <line x1={sk.ankle.x - 3} y1={sk.ankle.y + 6} x2={sk.ankle.x + 3} y2={sk.ankle.y + 6} class="gear-pad" style="stroke-width:6" />
+    <line x1={sk.ankle.x - 3} y1={sk.ankle.y + 6} x2={sk.ankle.x + 3} y2={sk.ankle.y + 6} class="gear-pad" style:stroke-width="6" />
   {:else if anim === 'lyingCurl'}
     <line x1="62" y1="124" x2="162" y2="124" class="gear-pad" />
     <rect class="gear dark" x="86" y="130" width="8" height={FLOOR - 130} />
     <rect class="gear dark" x="136" y="130" width="8" height={FLOOR - 130} />
-    <line x1={sk.ankle.x - 4} y1={sk.ankle.y + 8} x2={sk.ankle.x + 4} y2={sk.ankle.y + 8} class="gear-pad" style="stroke-width:6" />
+    <line x1={sk.ankle.x - 4} y1={sk.ankle.y + 8} x2={sk.ankle.x + 4} y2={sk.ankle.y + 8} class="gear-pad" style:stroke-width="6" />
     <rect class="gear dark" x="8" y="96" width="9" height={FLOOR - 96} rx="2" />
   {:else if anim === 'hipThrust' || anim === 'smithHipThrust' || anim === 'singleHipThrust'}
     <rect class="gear dark" x="40" y="119" width="46" height="10" rx="4" />
@@ -103,7 +103,7 @@
       <line x1="21" y1="140" x2={sk.ankle.x} y2={sk.ankle.y} class="cable" />
       <circle cx={sk.ankle.x} cy={sk.ankle.y} r="3.5" class="gear" />
     {:else}
-      <line x1="96" y1="104" x2={sk.ankle.x} y2={sk.ankle.y} class="gear-pad" style="stroke-width:5" />
+      <line x1="96" y1="104" x2={sk.ankle.x} y2={sk.ankle.y} class="gear-pad" style:stroke-width="5" />
       <circle cx="96" cy="104" r="5" class="gear" />
     {/if}
   {:else if anim === 'abductionMachine'}
@@ -127,7 +127,7 @@
     <rect class="gear dark" x="132" y="150" width="26" height="6" rx="2" />
     <rect class="gear dark" x="74" y="16" width="8" height={FLOOR - 16} rx="2" />
     <line x1="80" y1={sk.shoulder.y - 8} x2={sk.shoulder.x - 2} y2={sk.shoulder.y - 8} class="gear-line" />
-    <line x1={sk.shoulder.x - 8} y1={sk.shoulder.y - 8} x2={sk.shoulder.x + 6} y2={sk.shoulder.y - 8} class="gear-pad" style="stroke-width:7" />
+    <line x1={sk.shoulder.x - 8} y1={sk.shoulder.y - 8} x2={sk.shoulder.x + 6} y2={sk.shoulder.y - 8} class="gear-pad" style:stroke-width="7" />
   {:else if anim === 'cableCrunch'}
     <rect class="gear dark" x="96" y="2" width="70" height="7" rx="3" />
     <rect class="gear dark" x="160" y="2" width="9" height={FLOOR - 2} rx="2" />

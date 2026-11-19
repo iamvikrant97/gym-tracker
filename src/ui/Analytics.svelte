@@ -87,29 +87,29 @@
 {:else}
 
   <section class="tiles" aria-label="Summary">
-    <div class="tile" style="--i:0">
+    <div class="tile" style:--i="0">
       <div class="k">Workouts this week</div>
       <div class="v">{Math.round(shown[0])}<small> of {target}</small></div>
-      <div class="meter"><i style="--w:{Math.min(1, doneThisWeek / target)}"></i></div>
+      <div class="meter"><i style:--w={Math.min(1, doneThisWeek / target)}></i></div>
     </div>
-    <div class="tile" style="--i:1">
+    <div class="tile" style:--i="1">
       <div class="k">Personal bests this month</div>
       <div class="v">{Math.round(shown[1])}</div>
       <div class="d">{bests.names.length ? bests.names.slice(0, 2).join(', ') + (bests.names.length > 2 ? ` +${bests.names.length - 2}` : '') : 'none yet'}</div>
     </div>
-    <div class="tile" style="--i:2">
+    <div class="tile" style:--i="2">
       <div class="k">Week streak</div>
       <div class="v">{Math.round(shown[2])}</div>
       <div class="d flat">weeks hitting {target} workouts</div>
     </div>
-    <div class="tile" class:warn={under.length > 0} style="--i:3">
+    <div class="tile" class:warn={under.length > 0} style:--i="3">
       <div class="k">Under 10 sets, last 7 days</div>
       <div class="v">{Math.round(shown[3])}<small> muscle{under.length === 1 ? '' : 's'}</small></div>
       <div class="d flat">{under.slice(0, 3).join(', ')}{under.length > 3 ? ` +${under.length - 3}` : ''}</div>
     </div>
   </section>
 
-  <div class="tabs" role="tablist" aria-label="Progress view" style="--n:{TABS.findIndex((t) => t[0] === tab)}">
+  <div class="tabs" role="tablist" aria-label="Progress view" style:--n={TABS.findIndex((t) => t[0] === tab)}>
     <span class="pill" aria-hidden="true"></span>
     {#each TABS as [id, name]}
       <button type="button" role="tab" aria-selected={tab === id} onclick={() => { tab = id; scrub = null; }}>{name}</button>
@@ -119,11 +119,11 @@
   {#key tab}
   <div class="pane">
   {#if tab === 'volume'}
-    <section class="card" style="--i:0">
+    <section class="card" style:--i="0">
       <p class="cap">Weekly volume · top 5 muscles · last 12 weeks</p>
       <h2>Volume by muscle</h2>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <svg viewBox="0 0 {W} {H}" role="img" aria-label="Weekly volume for your five most trained muscles. Touch the chart to read a week." onpointermove={onMove} onpointerdown={onMove} onpointerleave={() => (scrub = null)} style="touch-action: pan-y">
+      <svg viewBox="0 0 {W} {H}" role="img" aria-label="Weekly volume for your five most trained muscles. Touch the chart to read a week." onpointermove={onMove} onpointerdown={onMove} onpointerleave={() => (scrub = null)} style:touch-action="pan-y">
         <defs><filter id="gl" x="-10%" y="-30%" width="120%" height="160%"><feGaussianBlur stdDeviation="3.2" /></filter></defs>
         {#each grid as g}
           <line x1={L} x2={R} y1={ys(g)} y2={ys(g)} stroke="#242934" />
@@ -131,12 +131,12 @@
         {/each}
         {#each top as m, i}
           {@const v = vol.series[m] ?? []}
-          <g class="breathe" style="--b:{1300 + i * 140}ms" opacity={focus && focus !== m ? 0 : 1}>
-            <path class="ln" d={smooth(v)} pathLength="1" fill="none" stroke={COLORS[i]} stroke-width="5" stroke-linecap="round" filter="url(#gl)" style="--d:{i * 90}ms" />
+          <g class="breathe" style:--b="{1300 + i * 140}ms" opacity={focus && focus !== m ? 0 : 1}>
+            <path class="ln" d={smooth(v)} pathLength="1" fill="none" stroke={COLORS[i]} stroke-width="5" stroke-linecap="round" filter="url(#gl)" style:--d="{i * 90}ms" />
           </g>
-          <path class="ln" d={smooth(v)} pathLength="1" fill="none" stroke={COLORS[i]} stroke-width={focus === m ? 3.4 : 2.2} stroke-linecap="round" opacity={focus && focus !== m ? 0.16 : 1} style="--d:{i * 90}ms" />
-          <circle class="ring" cx={xs(11)} cy={ys(v[11])} r="3.4" fill="none" stroke={COLORS[i]} stroke-width="1.5" style="--d:{1400 + i * 260}ms" opacity={focus && focus !== m ? 0 : 1} />
-          <circle class="dot" cx={xs(11)} cy={ys(v[11])} r="3.4" fill={COLORS[i]} opacity={focus && focus !== m ? 0.16 : 1} style="--d:{900 + i * 90}ms" />
+          <path class="ln" d={smooth(v)} pathLength="1" fill="none" stroke={COLORS[i]} stroke-width={focus === m ? 3.4 : 2.2} stroke-linecap="round" opacity={focus && focus !== m ? 0.16 : 1} style:--d="{i * 90}ms" />
+          <circle class="ring" cx={xs(11)} cy={ys(v[11])} r="3.4" fill="none" stroke={COLORS[i]} stroke-width="1.5" style:--d="{1400 + i * 260}ms" opacity={focus && focus !== m ? 0 : 1} />
+          <circle class="dot" cx={xs(11)} cy={ys(v[11])} r="3.4" fill={COLORS[i]} opacity={focus && focus !== m ? 0.16 : 1} style:--d="{900 + i * 90}ms" />
         {/each}
         {#each [0, 3, 6, 9, 11] as i}
           <text x={xs(i)} y="178" fill="#8c94a3" font-size="9.5" text-anchor={i === 11 ? 'end' : 'middle'}>{label(vol.weeks[i])}</text>
@@ -159,38 +159,38 @@
       </svg>
       <div class="legend">
         {#each top as m, i}
-          <button type="button" class="lg press" aria-pressed={focus === m} onclick={() => (focus = focus === m ? null : m)}><span style="background:{COLORS[i]}"></span>{m}</button>
+          <button type="button" class="lg press" aria-pressed={focus === m} onclick={() => (focus = focus === m ? null : m)}><span style:background={COLORS[i]}></span>{m}</button>
         {/each}
       </div>
       <p class="hint">Volume is weight × reps of your working sets, in kg. Touch the chart to read a week, tap a muscle to highlight it.</p>
     </section>
 
-    <section class="card" style="--i:1">
+    <section class="card" style:--i="1">
       <p class="cap">Training emphasis · last 90 days</p>
       <h2>Rep ranges</h2>
       {#each ranges as r, i}
         <div class="rr">
           <div class="rr-top"><span><b>{r.label}</b> <em>{r.reps}</em></span><span><b class="pc">{r.percent}%</b> <em>{r.sets} sets</em></span></div>
-          <div class="bar"><i style="--w:{r.percent / 100}; --d:{250 + i * 120}ms"></i></div>
+          <div class="bar"><i style:--w={r.percent / 100} style:--d="{250 + i * 120}ms"></i></div>
           <div class="note">{r.note}</div>
         </div>
       {/each}
     </section>
   {:else if tab === 'strength'}
-    <section class="card" style="--i:0">
+    <section class="card" style:--i="0">
       <p class="cap">Estimated 1-rep max · last 12 weeks</p>
       <h2>Strength by exercise</h2>
       {#each showAll ? strength : strength.slice(0, 8) as s, i}
-        <div class="ex" style="--i:{i}">
+        <div class="ex" style:--i={i}>
           <div class="ex-l"><div class="nm">{s.name}</div><div class="sub">{s.muscle} · {s.latest} kg{#if s.isRecord} · <span class="pr">Best yet</span>{/if}</div></div>
-          {#if s.points.length > 1}<svg class="sp" viewBox="0 0 64 24" aria-hidden="true"><polyline class="ln" pathLength="1" style="--d:{i * 50 + 150}ms" points={spark(s.points)} fill="none" stroke="#4c8dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
+          {#if s.points.length > 1}<svg class="sp" viewBox="0 0 64 24" aria-hidden="true"><polyline class="ln" pathLength="1" style:--d="{i * 50 + 150}ms" points={spark(s.points)} fill="none" stroke="#4c8dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
           <div class="dl" class:down={(s.change ?? 0) < 0}>{chg(s.change) || '·'}</div>
         </div>
       {/each}
       {#if strength.length > 8}<button type="button" class="more press" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${strength.length}`}</button>{/if}
     </section>
   {:else if tab === 'muscle'}
-    <section class="card" style="--i:0">
+    <section class="card" style:--i="0">
       <p class="cap">Working sets · last 7 days</p>
       <h2>Sets per muscle</h2>
       <p class="hint top">The shaded zone is 10 to 20 sets a week, a common range people use for growth. It is a guide, not a rule.</p>
@@ -198,20 +198,20 @@
         {@const n = week7[m] ?? 0}
         <div class="ms">
           <span class="mn">{m}</span>
-          <div class="track"><div class="zone"></div><i class:low={n < 10} style="--w:{Math.min(1, n / 25)}; --d:{i * 55}ms"></i></div>
+          <div class="track"><div class="zone"></div><i class:low={n < 10} style:--w={Math.min(1, n / 25)} style:--d="{i * 55}ms"></i></div>
           <span class="mc">{n}</span>
         </div>
       {/each}
     </section>
   {:else}
-    <section class="card" style="--i:0">
+    <section class="card" style:--i="0">
       <p class="cap">Workouts per week · last 12 weeks</p>
       <h2>Consistency</h2>
       <svg viewBox="0 0 340 150" role="img" aria-label="Workouts per week against your target">
         {#each sessions.counts as c, i}
           {@const h = (c / 7) * 110}
-          <rect class="col" x={L + i * 24.5} y={130 - h} width="16" height={h} rx="4" fill={c >= target ? '#4c8dff' : '#2a4a85'} style="--d:{i * 45}ms" />
-          {#if c > 0}<text class="dot" x={L + i * 24.5 + 8} y={124 - h} fill="#c9d3e6" font-size="9.5" text-anchor="middle" style="--d:{i * 45 + 400}ms">{c}</text>{/if}
+          <rect class="col" x={L + i * 24.5} y={130 - h} width="16" height={h} rx="4" fill={c >= target ? '#4c8dff' : '#2a4a85'} style:--d="{i * 45}ms" />
+          {#if c > 0}<text class="dot" x={L + i * 24.5 + 8} y={124 - h} fill="#c9d3e6" font-size="9.5" text-anchor="middle" style:--d="{i * 45 + 400}ms">{c}</text>{/if}
         {/each}
         <line x1={L - 4} x2="330" y1={130 - (target / 7) * 110} y2={130 - (target / 7) * 110} stroke="#f2b544" stroke-dasharray="4 4" />
         <text x="330" y={130 - (target / 7) * 110 - 5} fill="#f2b544" font-size="9.5" text-anchor="end">target {target}</text>
