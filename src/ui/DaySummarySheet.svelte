@@ -37,8 +37,11 @@
   {/if}
   {#each visits as v (v.key)}
     <div class="visit" data-testid="day-workout" data-flip>
-      <h3>{v.name}</h3>
-      {#if v.muscles.length}<div class="chips">{#each v.muscles.slice(0, 5) as m (m)}<span>{m}</span>{/each}</div>{/if}
+      <div class="hero" style:--c={v.color}>
+        <i class="bar"></i>
+        <h3>{v.name}</h3>
+        {#if v.muscles.length}<div class="chips">{#each v.muscles.slice(0, 5) as m, mi (m)}<span style:--k={mi}>{m}</span>{/each}</div>{/if}
+      </div>
       <dl class="figs">
         <div><dt>Sets</dt><dd data-testid="day-sets">{v.sets}</dd></div>
         {#if v.minutes !== null}<div><dt>Time</dt><dd><span data-testid="day-minutes">{v.minutes}</span><small>min</small></dd></div>{/if}
@@ -79,9 +82,20 @@
   .step { flex: 1; min-height: 44px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
   .step:disabled { opacity: 0.35; }
   .visit + .visit { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
-  .visit h3 { font: 800 22px/1.15 var(--display); margin: 0 0 8px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .chips span { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: var(--raised); color: var(--muted); }
+  .hero { position: relative; overflow: hidden; padding: 14px; margin-bottom: 12px; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 28%, #0f1218), #0f1218 70%); }
+  .hero > * { position: relative; z-index: 1; }
+  .hero::before { content: ''; position: absolute; inset: -45%; background: radial-gradient(circle at 30% 35%, color-mix(in srgb, var(--c) 50%, transparent), transparent 52%); opacity: 0.5; animation: drift 8s ease-in-out infinite alternate; pointer-events: none; }
+  .hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.18) 50%, transparent 62%); transform: translateX(-130%); animation: shine 1.2s 300ms var(--ease-out) 1 forwards; pointer-events: none; }
+  .hero .bar { position: absolute; left: 0; top: 0; height: 3px; width: 100%; background: var(--c); transform-origin: left; transform: scaleX(0); animation: bar 700ms 100ms var(--ease-out) forwards; z-index: 2; }
+  .visit h3 { font: 800 26px/1.1 var(--display); margin: 2px 0 10px; animation: rise 500ms 140ms var(--ease-out) both; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); animation: chip 400ms var(--ease-out) both; animation-delay: calc(280ms + var(--k, 0) * 70ms); }
+  @keyframes drift { from { transform: translate(-6%, -4%) scale(1); } to { transform: translate(10%, 8%) scale(1.15); } }
+  @keyframes shine { to { transform: translateX(130%); } }
+  @keyframes bar { to { transform: scaleX(1); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
+  @keyframes chip { from { opacity: 0; transform: scale(0.8) translateY(4px); } }
+  @media (prefers-reduced-motion: reduce) { .hero::before, .hero::after, .hero .bar, .visit h3, .chips span { animation: none; } .hero .bar { transform: none; } .hero::after { display: none; } }
   .figs { display: flex; gap: 10px; margin: 0 0 10px; }
   .figs > div { flex: 1; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
   .figs > div.gold { border-color: var(--amber); }

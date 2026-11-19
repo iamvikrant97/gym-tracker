@@ -46,9 +46,11 @@
   // One gym visit counts once even if a long break split it into two workouts.
   const sessionsDone = $derived(visitKeysInWeek(workouts, sets, today).size);
 
-  interface Day { date: string; dom: number; label: string; letter: string; trained: boolean; future: boolean; isToday: boolean; rest: boolean }
+  interface Day { color: string; date: string; dom: number; label: string; letter: string; trained: boolean; future: boolean; isToday: boolean; rest: boolean }
   const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   /** Eight week rows, oldest first: which days were trained, sessions done, PRs and hard sets that week. */
+  // Colour of each trained day (the session's colour; the first workout when there were several).
+  const toneByDate = $derived(new Map([...trainedDays].map((d) => [d, dayVisits(d, workouts, sets, lookup)[0]?.color ?? ''])));
   const rows = $derived.by(() => {
     const first = Date.parse(`${weekStart(today)}T00:00:00Z`) - (WEEKS - 1) * 7 * DAY_MS;
     return Array.from({ length: WEEKS }, (_, w) => {
@@ -56,7 +58,7 @@
         const date = new Date(first + (w * 7 + i) * DAY_MS).toISOString().slice(0, 10);
         const dom = Number(date.slice(8, 10));
         return {
-          date, dom, letter: LETTERS[i],
+          date, dom, letter: LETTERS[i], color: toneByDate.get(date) ?? '',
           label: `${dom} ${MONTHS[Number(date.slice(5, 7)) - 1]}`,
           trained: trainedDays.has(date) && date <= today, // a future date with sets (typo, wrong clock) is not a trained day
           future: date > today,
@@ -145,6 +147,7 @@
                 data-date={c.date}
                 data-trained="true"
                 style:--d={di}
+                style:--c={c.color || undefined}
                 onclick={() => openDay(c.date)}
               >{c.letter}</button>
             {:else}
@@ -201,7 +204,7 @@
   .dot { aspect-ratio: 1; min-width: 0; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font: 600 11px/1 var(--display); }
   button.dot { padding: 0; cursor: pointer; position: relative; }
   button.dot::before { content: ''; position: absolute; inset: -9px -2px; } /* hit area reaches about 48 px tall */
-  .dot.on { background: var(--blue); border-color: var(--blue); color: var(--on-blue); font-weight: 800; }
+  .dot.on { background: var(--c, var(--blue)); border-color: var(--c, var(--blue)); color: #0b0d11; font-weight: 800; }
   .dot.today:not(.on) { border-color: var(--blue); color: var(--text); }
   .dot.future { opacity: 0.35; }
   .dot.rest { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); font-weight: 800; }

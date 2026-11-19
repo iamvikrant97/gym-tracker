@@ -181,8 +181,33 @@ export function workoutSummary(
 /** Id prefix of workouts created by the Sheet import (their start/end times are synthetic). */
 export const IMPORT_ID_PREFIX = 'import-';
 
+const TONE = { blue: '#4c8dff', teal: '#2dd4bf', amber: '#f2b544', violet: '#a78bfa' };
+
+/**
+ * Colour of a session, so days read at a glance: Chest + Back blue, Legs and Lower amber, Shoulders + Arms and Pull teal,
+ * Full body violet. Anything else (custom workouts) follows its main muscles: push blue, pull teal, legs amber.
+ */
+export function sessionColor(name: string, muscles: Muscle[]): string {
+  const n = name.toLowerCase();
+  if (/chest.*back|push|upper/.test(n)) return TONE.blue;
+  if (/leg|lower/.test(n)) return TONE.amber;
+  if (/shoulder|arm|pull/.test(n)) return TONE.teal;
+  if (/full/.test(n)) return TONE.violet;
+  const score = { blue: 0, teal: 0, amber: 0 };
+  for (const [i, m] of muscles.entries()) {
+    const w = muscles.length - i;
+    if (m === 'Chest' || m === 'Shoulders' || m === 'Triceps') score.blue += w;
+    else if (m === 'Back' || m === 'Biceps') score.teal += w;
+    else if (m === 'Quads' || m === 'Hamstrings' || m === 'Glutes' || m === 'Calves') score.amber += w;
+  }
+  const top = (Object.entries(score) as [keyof typeof score, number][]).sort((a, b) => b[1] - a[1])[0];
+  return top[1] === 0 ? TONE.blue : TONE[top[0]];
+}
+
 export interface DayVisit {
   key: string;
+  /** Accent colour of the session (see sessionColor). */
+  color: string;
   /** Session name (e.g. "Chest + Back B"); "Workout" when the record is missing. */
   name: string;
   /** Minutes from start to end; null while the workout is open or has no end. */
@@ -238,12 +263,13 @@ export function dayVisits(date: string, workouts: Workout[], sets: SetLog[], loo
     const tally = new Map<Muscle, number>();
     for (const x of mine) { const m = muscleOf(x, lookup); if (m !== 'Other') tally.set(m, (tally.get(m) ?? 0) + 1); }
     const visit: DayVisit = {
-      key, name, minutes, sets: mine.length, volume: mine.reduce((n, x) => n + x.kg * x.reps, 0),
+      key, name, minutes, color: '', sets: mine.length, volume: mine.reduce((n, x) => n + x.kg * x.reps, 0),
       prs: exs.filter((e) => e.pr).length,
       improved: exs.filter((e) => { if (!e.prev) return false; const t = topOf(e.sets); return t.kg > e.prev.kg || (t.kg === e.prev.kg && t.reps > e.prev.reps); }).length,
       muscles: [...tally.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m),
       exercises: exs,
     };
+    visit.color = sessionColor(name, visit.muscles);
     out.push({ first: mine[0].doneAt, visit });
   };
   const seen = new Set<string>();
