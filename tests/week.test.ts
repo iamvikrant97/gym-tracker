@@ -38,7 +38,7 @@ describe('Week', () => {
     for (const d of [9, 10, 11]) expect(screen.getByLabelText(`${d} Nov, trained, view summary`)).toBeTruthy();
     expect(document.querySelector('[data-date="2026-11-12"]')?.getAttribute('data-trained')).toBe('false');
     expect(document.querySelector('[data-date="2026-11-08"]')?.getAttribute('data-trained')).toBe('false');
-    expect(document.querySelectorAll('.day').length).toBe(56);
+    expect(document.querySelectorAll('.dot').length).toBe(56);
   });
 
   it('shows weekly sessions against the target and per-muscle freshness', async () => {
@@ -67,7 +67,7 @@ describe('Week', () => {
     expect(document.querySelector('[data-date="2026-11-08"]')?.tagName).not.toBe('BUTTON'); // untrained
   });
 
-  it('tapping a trained day opens a sheet with the session, exercises, sets, volume and duration', async () => {
+  it('tapping a trained day opens a sheet with the session, exercises, sets, PRs and duration', async () => {
     const w: Workout = { id: 'wx', date: day(5), sessionId: 'CB-B', startedAt: at(5), endedAt: at(5) + 45 * 60_000, swaps: {} };
     await put('workouts', w);
     const mkSet = (id: string, exerciseId: string, setNo: number, kg: number, reps: number, extra: Partial<SetLog> = {}): SetLog => ({
@@ -90,7 +90,9 @@ describe('Week', () => {
     expect(dlg.textContent).not.toContain('20 × 12'); // warm-up
     expect(dlg.textContent).not.toContain('99 × 99'); // deleted
     expect(within(dlg).getByTestId('day-sets').textContent).toBe('3');
-    expect(within(dlg).getByTestId('day-volume').textContent).toContain('1,323'); // 440 + 382.5 + 500 = 1322.5 -> 1,323
+    expect(within(dlg).getByTestId('day-prs').textContent).toBe('0'); // nothing earlier to beat
+    expect(dlg.textContent).toContain('First time');
+    expect(dlg.textContent).not.toContain('kg lifted');
     expect(within(dlg).getByTestId('day-minutes').textContent).toContain('45');
   });
 
@@ -129,5 +131,28 @@ describe('Week', () => {
     expect(dlg.getAttribute('aria-hidden')).toBe('false');
     await fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-hidden')).toBe('true'));
+  });
+});
+
+describe('Week: relevant numbers', () => {
+  it('shows PRs and change since last time in the day sheet, with arrows to other workouts', async () => {
+    const day = (d: number) => `2026-11-${String(d).padStart(2, '0')}`;
+    const at = (d: number) => new Date(2026, 10, d, 8, 0).getTime();
+    const mk = (id: string, d: number, kg: number, reps: number, wid: string) => ({
+      id, workoutId: wid, date: day(d), sessionId: 'SA-A', exerciseId: 'converging-chest-press', setNo: 1, kg, reps,
+      doneAt: at(d), updatedAt: 1, deleted: false, synced: true, warmup: false,
+    });
+    await put('workouts', { id: 'wA', date: day(2), sessionId: 'SA-A', startedAt: at(2), endedAt: at(2) + 3_000_000, swaps: {} });
+    await put('workouts', { id: 'wB', date: day(4), sessionId: 'SA-A', startedAt: at(4), endedAt: at(4) + 3_000_000, swaps: {} });
+    await put('sets', mk('a1', 2, 40, 10, 'wA'));
+    await put('sets', mk('b1', 4, 42.5, 10, 'wB'));
+    render(Week);
+    await fireEvent.click(await screen.findByLabelText('4 Nov, trained, view summary'));
+    const dlg = await screen.findByRole('dialog', { name: '4 Nov' });
+    expect(within(dlg).getByTestId('day-prs').textContent).toBe('1');
+    expect(dlg.textContent).toContain('+2.5 kg');
+    expect(within(dlg).getByTestId('day-improved').textContent).toContain('1 of 1');
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Older workout' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: '2 Nov' }).textContent).toContain('First time'));
   });
 });

@@ -128,7 +128,7 @@
   const lastVisit = $derived(todayVisits.at(-1) ?? null);
   const doneName = $derived(lastVisit?.name ?? '');
   const doneSets = $derived(lastVisit?.sets ?? 0);
-  const doneVolume = $derived(lastVisit?.volume ?? 0);
+  const donePrs = $derived(lastVisit?.prs ?? 0);
   // Imported workouts have no real duration (the day summary hides it too): minutes is null for them.
   const doneMinutes = $derived(lastVisit?.minutes ?? null);
   const num = (n: number) => Math.round(n).toLocaleString('en-IN');
@@ -232,7 +232,7 @@
       <span class="dname">Done · {doneName}</span>
       {#if todayVisits.length > 1}<span class="more">{todayVisits.length} workouts today · tap for all</span>{/if}
       <span class="figs">
-        <span class="fig"><span class="k">Volume</span><span class="v"><span data-testid="done-volume">{num(doneVolume)}</span><small>kg</small></span></span>
+        <span class="fig"><span class="k">PRs</span><span class="v" data-testid="done-prs">{donePrs}</span></span>
         <span class="fig"><span class="k">Sets</span><span class="v" data-testid="done-sets">{doneSets}</span></span>
         {#if doneMinutes !== null}<span class="fig"><span class="k">Time</span><span class="v"><span data-testid="done-minutes">{doneMinutes}</span><small>min</small></span></span>{/if}
       </span>

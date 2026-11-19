@@ -137,3 +137,12 @@ describe('personalBests', () => {
     expect(personalBests(sets, TODAY).count).toBe(0);
   });
 });
+
+describe('weeklySetCounts', () => {
+  it('counts hard sets per week by muscle and ignores warm-ups', async () => {
+    const { weeklySetCounts } = await import('../src/lib/analytics');
+    const mk = (id: string, date: string, extra = {}) => ({ id, workoutId: 'w', date, sessionId: 'x', exerciseId: 'converging-chest-press', setNo: 1, kg: 40, reps: 10, doneAt: 1, updatedAt: 1, deleted: false, synced: true, warmup: false, feltIt: false, ...extra });
+    const v = weeklySetCounts([mk('1', '2026-11-16'), mk('2', '2026-11-17'), mk('3', '2026-11-17', { warmup: true }), mk('4', '2026-11-09')], '2026-11-19', 4);
+    expect(v.series.Chest).toEqual([0, 0, 1, 2]);
+  });
+});

@@ -45,7 +45,7 @@ describe('Progress overview', () => {
     expect(box.textContent).toContain('Workouts this week');
     expect(box.textContent).toContain('Personal bests this month');
     expect(box.textContent).toContain('Week streak');
-    expect(box.textContent).toContain('Volume by muscle');
+    expect(box.textContent).toContain('Sets by muscle');
   });
 
   it('switches between Volume, Strength, Muscle and Consistency', async () => {

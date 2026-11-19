@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   // Overview numbers and charts for the Progress screen. Everything is worked out from the logged sets (see lib/analytics).
-  import { exerciseStrength, monthStats, personalBests, repRanges, sessionsPerWeek, setsLast7Days, topMuscles, weeklyVolume } from '../lib/analytics';
+  import { exerciseStrength, monthStats, personalBests, repRanges, sessionsPerWeek, setsLast7Days, topMuscles, weeklySetCounts } from '../lib/analytics';
   import type { ExerciseLookup } from '../lib/stats';
   import type { Muscle, SetLog } from '../lib/types';
 
@@ -9,7 +9,6 @@
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const label = (d: string) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
-  const kfmt = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(Math.round(n)));
   const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   type Tab = 'volume' | 'strength' | 'muscle' | 'consistency';
@@ -21,7 +20,7 @@
 
   const hasData = $derived(sets.some((s) => !s.warmup && !s.deleted && s.reps > 0));
   const stats = $derived(monthStats(sets, today, target));
-  const vol = $derived(weeklyVolume(sets, today, 12, lookup));
+  const vol = $derived(weeklySetCounts(sets, today, 12, lookup));
   const top = $derived(topMuscles(vol, 5));
   const ranges = $derived(repRanges(sets, today, 90));
   const strength = $derived(exerciseStrength(sets, today, 12, lookup));
@@ -53,9 +52,9 @@
 
   // ---- the line chart ----
   const W = 340, H = 190, L = 34, R = 330, T = 12, B = 160;
-  const max = $derived(Math.max(1, ...top.flatMap((m) => vol.series[m] ?? [])));
-  const step = $derived(10 ** Math.floor(Math.log10(max)) / 2);
-  const niceMax = $derived(Math.ceil(max / step) * step);
+  // Hard sets per week: the axis always reaches 20 so the 10 to 20 zone is visible, and moves in whole numbers.
+  const max = $derived(Math.max(20, ...top.flatMap((m) => vol.series[m] ?? [])));
+  const niceMax = $derived(Math.ceil(max / 4) * 4);
   const xs = (i: number) => L + (i * (R - L)) / 11;
   const ys = (v: number) => B - (v / niceMax) * (B - T);
   function smooth(vals: number[]): string {
@@ -83,7 +82,7 @@
 
 <section class="an" aria-label="Overview" data-testid="analytics">
 {#if !hasData}
-  <div class="empty"><b>Your progress will show up here</b>Log a few workouts and you will see your weekly volume, strength and consistency.</div>
+  <div class="empty"><b>Your progress will show up here</b>Log a few workouts and you will see your weekly sets, strength and consistency.</div>
 {:else}
 
   <section class="tiles" aria-label="Summary">
@@ -120,14 +119,16 @@
   <div class="pane">
   {#if tab === 'volume'}
     <section class="card" style:--i="0">
-      <p class="cap">Weekly volume · top 5 muscles · last 12 weeks</p>
-      <h2>Volume by muscle</h2>
+      <p class="cap">Hard sets per week · top 5 muscles · last 12 weeks</p>
+      <h2>Sets by muscle</h2>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <svg viewBox="0 0 {W} {H}" role="img" aria-label="Weekly volume for your five most trained muscles. Touch the chart to read a week." onpointermove={onMove} onpointerdown={onMove} onpointerleave={() => (scrub = null)} style:touch-action="pan-y">
+      <svg viewBox="0 0 {W} {H}" role="img" aria-label="Hard sets per week for your five most trained muscles. Touch the chart to read a week." onpointermove={onMove} onpointerdown={onMove} onpointerleave={() => (scrub = null)} style:touch-action="pan-y">
         <defs><filter id="gl" x="-10%" y="-30%" width="120%" height="160%"><feGaussianBlur stdDeviation="3.2" /></filter></defs>
+        <rect x={L} y={ys(20)} width={R - L} height={ys(10) - ys(20)} rx="4" fill="#4c8dff" opacity="0.09" />
+        <text x={L + 4} y={ys(10) - 4} fill="#6f9fe8" font-size="8.5">10 to 20 sets</text>
         {#each grid as g}
           <line x1={L} x2={R} y1={ys(g)} y2={ys(g)} stroke="#242934" />
-          <text x={L - 6} y={ys(g) + 3.5} fill="#8c94a3" font-size="9.5" text-anchor="end">{g === 0 ? '0' : kfmt(g)}</text>
+          <text x={L - 6} y={ys(g) + 3.5} fill="#8c94a3" font-size="9.5" text-anchor="end">{g}</text>
         {/each}
         {#each top as m, i}
           {@const v = vol.series[m] ?? []}
@@ -148,11 +149,11 @@
           {#each top as m, i}<circle cx={sx} cy={ys(vol.series[m]?.[scrub] ?? 0)} r="3.6" fill={COLORS[i]} stroke="#13161c" stroke-width="1.5" />{/each}
           <g transform="translate({right ? sx + 8 : sx - 112} {T + 2})">
             <rect width="104" height={18 + top.length * 14} rx="8" fill="#0b0d11" stroke="#242934" />
-            <text x="9" y="14" fill="#8c94a3" font-size="9.5">Week of {label(vol.weeks[scrub])}</text>
+            <text x="9" y="14" fill="#8c94a3" font-size="9.5">Week of {label(vol.weeks[scrub])} · sets</text>
             {#each top as m, i}
               <circle cx="12" cy={26 + i * 14} r="3" fill={COLORS[i]} />
               <text x="20" y={29.5 + i * 14} fill="#e8eaee" font-size="9.5">{m}</text>
-              <text x="97" y={29.5 + i * 14} fill="#e8eaee" font-size="9.5" text-anchor="end">{kfmt(vol.series[m]?.[scrub] ?? 0)}</text>
+              <text x="97" y={29.5 + i * 14} fill="#e8eaee" font-size="9.5" text-anchor="end">{vol.series[m]?.[scrub] ?? 0}</text>
             {/each}
           </g>
         {/if}
@@ -162,7 +163,7 @@
           <button type="button" class="lg press" aria-pressed={focus === m} onclick={() => (focus = focus === m ? null : m)}><span style:background={COLORS[i]}></span>{m}</button>
         {/each}
       </div>
-      <p class="hint">Volume is weight × reps of your working sets, in kg. Touch the chart to read a week, tap a muscle to highlight it.</p>
+      <p class="hint">A hard set is a working set, not a warm-up. The shaded band (10 to 20 sets a week per muscle) is a common range for growth, a guide and not a rule. Touch the chart to read a week, tap a muscle to highlight it.</p>
     </section>
 
     <section class="card" style:--i="1">

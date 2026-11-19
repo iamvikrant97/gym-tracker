@@ -46,22 +46,33 @@
   // One gym visit counts once even if a long break split it into two workouts.
   const sessionsDone = $derived(visitKeysInWeek(workouts, sets, today).size);
 
-  const calendar = $derived.by(() => {
+  interface Day { date: string; dom: number; label: string; letter: string; trained: boolean; future: boolean; isToday: boolean }
+  const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  /** Eight week rows, oldest first: which days were trained, sessions done, PRs and hard sets that week. */
+  const rows = $derived.by(() => {
     const first = Date.parse(`${weekStart(today)}T00:00:00Z`) - (WEEKS - 1) * 7 * DAY_MS;
-    return Array.from({ length: WEEKS * 7 }, (_, i) => {
-      const date = new Date(first + i * DAY_MS).toISOString().slice(0, 10);
-      const dom = Number(date.slice(8, 10));
+    return Array.from({ length: WEEKS }, (_, w) => {
+      const days: Day[] = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date(first + (w * 7 + i) * DAY_MS).toISOString().slice(0, 10);
+        const dom = Number(date.slice(8, 10));
+        return {
+          date, dom, letter: LETTERS[i],
+          label: `${dom} ${MONTHS[Number(date.slice(5, 7)) - 1]}`,
+          trained: trainedDays.has(date) && date <= today, // a future date with sets (typo, wrong clock) is not a trained day
+          future: date > today,
+          isToday: date === today,
+        };
+      });
+      const trained = days.filter((d) => d.trained);
+      const visits = trained.flatMap((d) => dayVisits(d.date, workouts, sets, lookup));
+      const a = days[0], z = days[6];
+      const label = a.label.slice(-3) === z.label.slice(-3) ? `${a.dom}–${z.label}` : `${a.label} – ${z.label}`;
       return {
-        date,
-        dom,
-        label: `${dom} ${MONTHS[Number(date.slice(5, 7)) - 1]}`,
-        trained: trainedDays.has(date) && date <= today, // a future date with sets (typo, wrong clock) is not a trained day
-        future: date > today,
-        isToday: date === today,
+        start: a.date, label, days, done: trained.length, current: w === WEEKS - 1,
+        prs: visits.reduce((n, v) => n + v.prs, 0), sets: visits.reduce((n, v) => n + v.sets, 0),
       };
     });
   });
-
   function freshness(m: Muscle): string {
     const d = daysSince(sets, m, today, lookup);
     return d === null ? 'Not trained yet' : d === 0 ? 'Trained today' : d === 1 ? 'Trained yesterday' : `Trained ${d} days ago`;
@@ -71,7 +82,12 @@
   let picked = $state<string | null>(null);
   let shown = $state<string | null>(null); // kept while the sheet slides out, so its content does not vanish mid-animation
   const visits = $derived(shown ? dayVisits(shown, workouts, sets, lookup) : []);
-  const pickedLabel = $derived(calendar.find((c) => c.date === shown)?.label ?? '');
+  const pickedLabel = $derived(rows.flatMap((r) => r.days).find((c) => c.date === shown)?.label ?? '');
+  // Older / newer trained day, for the arrows in the sheet.
+  const trainedList = $derived(rows.flatMap((r) => r.days).filter((d) => d.trained).map((d) => d.date));
+  const at = $derived(shown ? trainedList.indexOf(shown) : -1);
+  const older = $derived(at > 0 ? trainedList[at - 1] : null);
+  const newer = $derived(at >= 0 && at < trainedList.length - 1 ? trainedList[at + 1] : null);
   function openDay(date: string) {
     shown = date;
     picked = date;
@@ -113,39 +129,37 @@
   </div>
 
   <h2 class="cal-title">Last 8 weeks</h2>
-  <div class="cal-days muted" aria-hidden="true">
-    {#each ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as d, i (i)}<span>{d}</span>{/each}
-  </div>
-  <div class="cal" role="grid" aria-label="Training days, last 8 weeks">
-    {#each calendar as c (c.date)}
-      <div class="cell" role="gridcell">
-        {#if c.trained}
-          <button
-            type="button"
-            class="day on press"
-            class:today={c.isToday}
-            aria-label="{c.label}, trained, view summary"
-            data-date={c.date}
-            data-trained="true"
-            onclick={() => openDay(c.date)}
-          >{c.dom}</button>
-        {:else}
-          <span
-            class="day"
-            class:future={c.future}
-            class:today={c.isToday}
-            aria-label={c.label}
-            role="img"
-            data-date={c.date}
-            data-trained="false"
-          >{c.dom}</span>
-        {/if}
+  <div class="rows" role="grid" aria-label="Training days, last 8 weeks">
+    {#each rows as r (r.start)}
+      <div class="wk" class:cur={r.current} role="row">
+        <span class="wl">{r.current ? 'This week' : r.label}</span>
+        <div class="dots">
+          {#each r.days as c (c.date)}
+            {#if c.trained}
+              <button
+                type="button"
+                class="dot on press"
+                class:today={c.isToday}
+                aria-label="{c.label}, trained, view summary"
+                data-date={c.date}
+                data-trained="true"
+                onclick={() => openDay(c.date)}
+              >{c.letter}</button>
+            {:else}
+              <span class="dot" class:future={c.future} class:today={c.isToday} aria-label={c.label} role="img" data-date={c.date} data-trained="false">{c.letter}</span>
+            {/if}
+          {/each}
+        </div>
+        <div class="wr">
+          <b class:hit={r.done >= settings.weeklyTarget && r.done > 0}>{r.done}<span> / {settings.weeklyTarget}</span></b>
+          {#if r.prs > 0}<small class="gold">{r.prs} PR{r.prs === 1 ? '' : 's'}</small>{:else if r.sets > 0}<small>{r.sets} sets</small>{:else}<small>rest week</small>{/if}
+        </div>
       </div>
     {/each}
   </div>
 </section>
 
-<DaySummarySheet open={picked !== null} onclose={() => (picked = null)} title={pickedLabel} {visits} />
+<DaySummarySheet open={picked !== null} onclose={() => (picked = null)} title={pickedLabel} {visits} onprev={older ? () => openDay(older) : undefined} onnext={newer ? () => openDay(newer) : undefined} />
 
 <style>
   .lead { margin: 0 0 18px; font-size: 13px; }
@@ -169,13 +183,21 @@
   .pause[aria-checked='true'] .sw::after { transform: translateX(18px); background: #fff; }
 
   .cal-title { font: 600 12px/1 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 28px 0 10px; }
-  .cal-days, .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-  .cal-days { font-size: 11px; text-align: center; margin-bottom: 6px; }
-  .cell { display: grid; min-height: 48px; }
-  .day { height: 100%; width: 100%; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--muted); font: 500 12px/1 var(--display); font-variant-numeric: tabular-nums; }
-  button.day { border: 0; padding: 0; cursor: pointer; position: relative; }
-  button.day::before { content: ''; position: absolute; inset: 0 -2px; } /* hit area reaches 48 px wide as well */
-  .day.on { background: var(--blue); color: var(--on-blue); font-weight: 700; }
-  .day.today:not(.on) { outline: 1px solid var(--blue); outline-offset: -1px; color: var(--text); }
-  .day.future { opacity: 0.35; }
+  .rows { display: grid; }
+  .wk { display: grid; grid-template-columns: 50px minmax(0, 1fr) 46px; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .wl { font-size: 11.5px; color: var(--muted); line-height: 1.2; }
+  .wk.cur .wl { color: var(--text); font-weight: 600; }
+  .dots { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .dot { aspect-ratio: 1; min-width: 0; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font: 600 11px/1 var(--display); }
+  button.dot { padding: 0; cursor: pointer; position: relative; }
+  button.dot::before { content: ''; position: absolute; inset: -9px -2px; } /* hit area reaches about 48 px tall */
+  .dot.on { background: var(--blue); border-color: var(--blue); color: var(--on-blue); font-weight: 800; }
+  .dot.today:not(.on) { border-color: var(--blue); color: var(--text); }
+  .dot.future { opacity: 0.35; }
+  .wr { text-align: right; line-height: 1.15; }
+  .wr b { font: 800 16px var(--display); font-variant-numeric: tabular-nums; }
+  .wr b span { font: 500 11px var(--body); color: var(--muted); }
+  .wr b.hit { color: var(--green); }
+  .wr small { display: block; font-size: 11px; color: var(--muted); }
+  .wr small.gold { color: var(--amber); font-weight: 700; }
 </style>

@@ -36,6 +36,21 @@ export function weeklyVolume(sets: SetLog[], today: string, weeks = 12, lookup: 
   return { weeks: labels, series };
 }
 
+/** Hard (working) sets per week by muscle, in the same shape as weeklyVolume. */
+export function weeklySetCounts(sets: SetLog[], today: string, weeks = 12, lookup: ExerciseLookup = exerciseById): WeeklyVolume {
+  const thisMonday = toDay(weekStart(today));
+  const labels = Array.from({ length: weeks }, (_, i) => fromDay(thisMonday - 7 * (weeks - 1 - i)));
+  const series: Partial<Record<Muscle, number[]>> = {};
+  for (const s of sets) {
+    if (!working(s)) continue;
+    const back = weeksBack(s.date, today);
+    if (back < 0 || back >= weeks) continue;
+    const row = (series[muscleOf(s, lookup)] ??= new Array<number>(weeks).fill(0));
+    row[weeks - 1 - back] += 1;
+  }
+  return { weeks: labels, series };
+}
+
 /** The muscles with the most total volume over the window, biggest first. */
 export function topMuscles(v: WeeklyVolume, n = 5): Muscle[] {
   return (Object.entries(v.series) as [Muscle, number[]][])

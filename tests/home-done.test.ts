@@ -61,7 +61,7 @@ describe('Home after finishing today', () => {
     render(Home);
     const card = await screen.findByRole('button', { name: /Done · Shoulders \+ Arms B/ });
     expect(within(card).getByTestId('done-sets').textContent).toBe('4');
-    expect(within(card).getByTestId('done-volume').textContent).toBe('800'); // 4 x 20 x 10
+    expect(within(card).getByTestId('done-prs').textContent).toBe('0'); // nothing earlier to beat
     expect(within(card).getByTestId('done-minutes').textContent).toBe('60');
     expect(screen.getByTestId('next-workout').textContent).toContain('Saturday · Legs B');
     expect(screen.queryByRole('button', { name: 'Start workout' })).toBeNull();

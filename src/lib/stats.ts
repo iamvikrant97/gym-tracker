@@ -189,8 +189,24 @@ export interface DayVisit {
   minutes: number | null;
   sets: number;
   volume: number;
-  exercises: { exerciseId: string; name: string; sets: { id: string; kg: number; reps: number }[] }[];
+  /** Exercises in this visit that beat everything done before. */
+  prs: number;
+  /** Exercises whose top set beat the previous time (heavier, or the same weight for more reps). */
+  improved: number;
+  /** Muscles worked, most sets first. */
+  muscles: Muscle[];
+  exercises: {
+    exerciseId: string;
+    name: string;
+    sets: { id: string; kg: number; reps: number }[];
+    /** Beat every earlier set of this exercise. */
+    pr: boolean;
+    /** Top set (heaviest, then most reps) of the previous visit to this exercise; null the first time. */
+    prev: { kg: number; reps: number } | null;
+  }[];
 }
+
+const topOf = (xs: { kg: number; reps: number }[]) => xs.reduce((a, b) => (b.kg > a.kg || (b.kg === a.kg && b.reps > a.reps) ? b : a));
 
 /**
  * The gym visits of one date, each with its working sets grouped by exercise (in the order first done).
@@ -206,10 +222,28 @@ export function dayVisits(date: string, workouts: Workout[], sets: SetLog[], loo
     mine.sort((a, b) => a.doneAt - b.doneAt || a.setNo - b.setNo);
     const byEx = new Map<string, DayVisit['exercises'][number]>();
     for (const x of mine) {
-      if (!byEx.has(x.exerciseId)) byEx.set(x.exerciseId, { exerciseId: x.exerciseId, name: lookup(x.exerciseId)?.name ?? x.exerciseId, sets: [] });
+      if (!byEx.has(x.exerciseId)) byEx.set(x.exerciseId, { exerciseId: x.exerciseId, name: lookup(x.exerciseId)?.name ?? x.exerciseId, sets: [], pr: false, prev: null });
       byEx.get(x.exerciseId)!.sets.push({ id: x.id, kg: x.kg, reps: x.reps });
     }
-    const visit: DayVisit = { key, name, minutes, sets: mine.length, volume: mine.reduce((n, x) => n + x.kg * x.reps, 0), exercises: [...byEx.values()] };
+    // Compare with earlier dates only, so a session is never measured against itself.
+    for (const e of byEx.values()) {
+      const before = sets.filter((h) => h.exerciseId === e.exerciseId && working(h) && h.date < date);
+      const ex = lookup(e.exerciseId);
+      e.pr = !!ex && e.sets.some((x) => isPR(ex, { kg: x.kg, reps: x.reps, warmup: false }, before));
+      const lastDate = before.reduce((d, h) => (h.date > d ? h.date : d), '');
+      const last = before.filter((h) => h.date === lastDate);
+      e.prev = last.length ? topOf(last) : null;
+    }
+    const exs = [...byEx.values()];
+    const tally = new Map<Muscle, number>();
+    for (const x of mine) { const m = muscleOf(x, lookup); if (m !== 'Other') tally.set(m, (tally.get(m) ?? 0) + 1); }
+    const visit: DayVisit = {
+      key, name, minutes, sets: mine.length, volume: mine.reduce((n, x) => n + x.kg * x.reps, 0),
+      prs: exs.filter((e) => e.pr).length,
+      improved: exs.filter((e) => { if (!e.prev) return false; const t = topOf(e.sets); return t.kg > e.prev.kg || (t.kg === e.prev.kg && t.reps > e.prev.reps); }).length,
+      muscles: [...tally.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m),
+      exercises: exs,
+    };
     out.push({ first: mine[0].doneAt, visit });
   };
   const seen = new Set<string>();
