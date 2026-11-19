@@ -24,6 +24,7 @@
   import type { Exercise, Muscle, Settings } from '../lib/types';
   import { workout, localDate } from '../lib/workout.svelte';
   import AddExerciseForm from '../ui/AddExerciseForm.svelte';
+  import Analytics from '../ui/Analytics.svelte';
   import Sheet from '../ui/Sheet.svelte';
   import Sparkbars from '../ui/Sparkbars.svelte';
   import { showToast } from '../ui/toast.svelte';
@@ -165,6 +166,7 @@
 
 <section class="screen">
   <h1 class="page-title">Progress</h1>
+  <Analytics {sets} {today} target={settings.weeklyTarget ?? 6} {lookup} />
   <div class="seg-ctl" role="tablist" aria-label="Progress view">
     <button type="button" role="tab" aria-selected={view === 'muscles'} onclick={() => (view = 'muscles')}>Muscles</button>
     <button type="button" role="tab" aria-selected={view === 'exercises'} onclick={() => (view = 'exercises')}>Exercises</button>
