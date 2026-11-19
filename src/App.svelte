@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import { onMount } from 'svelte';
+  import Library from './screens/Library.svelte';
   import { parseRoute } from './lib/route';
   import { workout } from './lib/workout.svelte';
   import Home from './screens/Home.svelte';
@@ -90,7 +91,7 @@
    * Unregistered routes show a placeholder.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout, summary: Summary, settings: Settings };
+  const screens: Record<string, Component<any>> = { home: Home, progress: Progress, week: Week, workout: Workout, summary: Summary, settings: Settings, library: Library };
   const Screen = $derived(screens[route]);
   const showNav = $derived(gate === 'ready' && ['home', 'workout', 'progress', 'week'].includes(route));
 

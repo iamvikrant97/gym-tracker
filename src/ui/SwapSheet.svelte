@@ -52,6 +52,12 @@
     return workout.settings?.stepOverrides[e.id] ?? e.step;
   }
 
+  function openLibrary() {
+    try { sessionStorage.setItem('gym.libFrom', 'workout'); } catch { /* no storage */ }
+    onclose();
+    location.hash = '#/library';
+  }
+
   function onadded(ex: Exercise) {
     added = [...added, ex];
     adding = false;
@@ -76,6 +82,7 @@
   <button type="button" class="opt add press" aria-expanded={adding} onclick={() => (adding = !adding)}>
     <span class="plus" aria-hidden="true">+</span><span class="nm">Add exercise</span>
   </button>
+  <button type="button" class="opt lib press" onclick={openLibrary}>Not sure which? Browse the exercise library <span aria-hidden="true">→</span></button>
   {#if adding && current}
     <div class="form">
       <AddExerciseForm slot={current.slot} muscle={current.muscle} {onadded} />
@@ -94,5 +101,6 @@
   .opt[aria-checked='true'] .dot::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); }
   .add { margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; color: var(--blue); }
   .plus { width: 20px; text-align: center; font: 600 20px/1 var(--display); }
+  .lib { color: var(--muted); font-size: 13px; min-height: 48px; }
   .form { padding: 6px 2px 4px; }
 </style>
