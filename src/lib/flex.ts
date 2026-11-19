@@ -57,16 +57,16 @@ export function recommend(plan: Plan, workouts: Workout[], sets: SetLog[], today
 export const customName = (muscles: Muscle[]): string => muscles.join(' + ');
 
 /**
- * A one-off workout for the chosen muscles: two exercises each, taken from the plan first (what you already do),
+ * A one-off workout for the chosen muscles: `perMuscle` exercises each (default two), taken from the plan first (what you already do),
  * then from the library. Three working sets per exercise.
  */
-export function buildCustom(muscles: Muscle[], plan: Plan, lookup: ExerciseLookup = exerciseById): { name: string; items: TemplateItem[] } {
+export function buildCustom(muscles: Muscle[], plan: Plan, lookup: ExerciseLookup = exerciseById, perMuscle = 2): { name: string; items: TemplateItem[] } {
   const used = new Set<string>();
   const items: TemplateItem[] = [];
   const fromPlan = plan.sessions.flatMap((t) => t.items.map((i) => i.exerciseId));
   for (const m of muscles) {
     const pool = [...new Set([...fromPlan, ...EXERCISES.map((e) => e.id)])].filter((id) => lookup(id)?.muscle === m && !used.has(id));
-    for (const id of pool.slice(0, 2)) {
+    for (const id of pool.slice(0, perMuscle)) {
       used.add(id);
       items.push({ exerciseId: id, sets: 3 });
     }

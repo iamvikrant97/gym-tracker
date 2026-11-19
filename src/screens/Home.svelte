@@ -24,6 +24,7 @@
   let swapOpen = $state(false);
   let building = $state(false);
   let chosenMuscles = $state<Muscle[]>([]);
+  let perMuscle = $state(2);
   let summaryOpen = $state(false);
 
   // The app can sit open (or in the background) overnight: re-read the clock when it comes back and every minute.
@@ -246,6 +247,11 @@
     }
   }
 
+  const customInfo = $derived.by(() => {
+    const c = buildCustom(chosenMuscles, planNow, lookup, perMuscle);
+    const rests = c.items.flatMap((i) => Array.from({ length: i.sets }, () => Math.min(settings.restOverrides[i.exerciseId] ?? lookup(i.exerciseId)?.restSec ?? 120, 300)));
+    return { name: c.name, sets: rests.length, minutes: estimateMinutes(rests) };
+  });
   function toggleMuscle(m: Muscle) {
     chosenMuscles = chosenMuscles.includes(m) ? chosenMuscles.filter((x) => x !== m) : [...chosenMuscles, m];
   }
@@ -253,7 +259,7 @@
     if (starting || chosenMuscles.length === 0) return;
     starting = true;
     try {
-      const c = buildCustom(chosenMuscles, planNow, lookup);
+      const c = buildCustom(chosenMuscles, planNow, lookup, perMuscle);
       if (c.items.length === 0) throw new Error('No exercises for that choice');
       await workout.startCustom(c.name, c.items);
       swapOpen = false;
@@ -381,7 +387,13 @@
         <button type="button" class="chip press" aria-pressed={chosenMuscles.includes(m)} onclick={() => toggleMuscle(m)}>{m}</button>
       {/each}
     </div>
-    <p class="cnote">{chosenMuscles.length ? customName(chosenMuscles) : 'Pick one or more'} · two exercises each, three sets. Your plan is not changed.</p>
+    <div class="per" role="group" aria-label="Exercises per muscle">
+      <span>Exercises per muscle</span>
+      {#each [1, 2, 3] as n (n)}
+        <button type="button" class="chip press" aria-pressed={perMuscle === n} aria-label="{n} per muscle" onclick={() => (perMuscle = n)}>{n}</button>
+      {/each}
+    </div>
+    <p class="cnote" data-testid="custom-info">{chosenMuscles.length ? `${customName(chosenMuscles)} · ${customInfo.sets} sets · about ${customInfo.minutes} min` : 'Pick one or more'}. Your plan is not changed.</p>
     <button class="start btn-primary press" type="button" disabled={chosenMuscles.length === 0 || starting} onclick={startCustom}>Start this workout</button>
     <button class="swapday" type="button" onclick={() => (building = false)}>Back</button>
   {:else}
@@ -480,6 +492,9 @@
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .chip { min-height: 48px; padding: 0 16px; border-radius: 24px; background: var(--raised); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
   .chip[aria-pressed='true'] { background: var(--blue); color: var(--on-blue); border-color: var(--blue); }
+  .per { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+  .per span { margin-right: auto; }
+  .per .chip { min-width: 48px; padding: 0; }
   .cnote { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
   .opt { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 12px; min-height: 56px; border-radius: 12px; text-align: left; }
   .nm { display: block; font-weight: 600; }

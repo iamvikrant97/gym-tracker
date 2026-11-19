@@ -99,6 +99,7 @@ describe('Home: rest day and choosing', () => {
     await fireEvent.click(screen.getByTestId('pick-custom'));
     await fireEvent.click(screen.getByRole('button', { name: 'Chest' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Quads' }));
+    expect(screen.getByTestId('custom-info').textContent).toMatch(/12 sets · about \d+ min/);
     await fireEvent.click(screen.getByRole('button', { name: 'Start this workout' }));
     await waitFor(() => expect(location.hash).toBe('#/workout'));
     expect(workout.current?.sessionId).toBe('CUSTOM');

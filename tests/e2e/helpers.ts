@@ -74,6 +74,8 @@ export async function mockBridge(page: Page) {
 
 /** Fresh app with the seeded history, on Home. */
 export async function openSeeded(page: Page) {
+  // The seeded history is 9-11 Nov: pin the clock to that week (Thu 12 Nov) so weekly rotation behaves the same on any real date.
+  await page.clock.setFixedTime(new Date(2026, 10, 12, 12, 0));
   await page.goto('./');
   // An empty install opens the first-run setup (the database exists by then); seeding data makes it Vik's install.
   await page.getByRole('heading', { name: 'How many days a week?' }).waitFor();
