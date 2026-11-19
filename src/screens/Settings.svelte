@@ -378,6 +378,17 @@
   <article class="card">
     <h2>Spotify</h2>
     <p class="status">{spotify.connected ? (spotify.needsAuth ? 'Login expired · connect again' : 'Connected') : 'Not connected'}</p>
+    <p class="hint"><strong>Spotify Premium is needed</strong> to control music from here. Free accounts can't be controlled by apps.</p>
+    <details class="how">
+      <summary>How to connect</summary>
+      <ol>
+        <li>Make sure you have <strong>Spotify Premium</strong> and the Spotify app on this phone.</li>
+        <li>Get a <strong>Client ID</strong> from the person who shared this app with you. They also need to add your Spotify email first, or Spotify will refuse the login.</li>
+        <li>Paste the Client ID below and tap <strong>Connect Spotify</strong>. Log in and allow access.</li>
+        <li>Open Spotify and play any song once. After that the music bar here can play, pause and skip.</li>
+      </ol>
+      <p class="hint">The Redirect URI below is only for whoever owns the Client ID. Friends don't need to touch it. Don't use music control? Skip this whole section; the rest of the app works without it.</p>
+    </details>
     <label class="field">Client ID
       <input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" bind:value={clientId} onchange={saveClientId} />
     </label>
@@ -579,6 +590,8 @@
   .switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform 200ms var(--ease-out), background 200ms; }
   .switch[aria-checked='true'] { background: var(--blue-deep); border-color: var(--blue); }
   .switch[aria-checked='true'] i { transform: translateX(20px); background: var(--blue); }
+  .how ol { margin: 0 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; }
+  .how .hint { margin-bottom: 12px; }
   details { border-top: 1px solid var(--line); }
   summary { display: flex; align-items: center; min-height: 48px; cursor: pointer; font-weight: 600; list-style: none; }
   summary::-webkit-details-marker { display: none; }

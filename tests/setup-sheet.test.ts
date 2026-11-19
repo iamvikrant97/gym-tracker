@@ -63,6 +63,7 @@ describe('Form guide tab', () => {
     const form = await screen.findByRole('tab', { name: 'Form' });
     expect(form.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('group', { name: 'Animation controls' })).toBeTruthy();
+    expect(screen.getByText(/general reference.*may not match your body/)).toBeTruthy();
     await fireEvent.click(screen.getByRole('tab', { name: 'Set up' }));
     expect(screen.queryByRole('group', { name: 'Animation controls' })).toBeNull();
   });

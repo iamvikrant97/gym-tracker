@@ -42,6 +42,7 @@
     <ul class="list dont">
       {#each guide.donts as d}<li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>{d}</li>{/each}
     </ul>
+    <p class="note">These guides are a general reference. The drawings are simplified, so they may not match your body or your machine exactly. Not medical advice. Stop if anything hurts, and ask a coach if you're unsure.</p>
   </div>
 {/if}
 
@@ -68,6 +69,7 @@
   .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .list li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; font-size: 14.5px; line-height: 1.35; }
   .list svg { width: 18px; height: 18px; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; margin-top: 1px; }
+  .note { margin: 6px 0 0; padding-top: 12px; border-top: 1px solid var(--line, #242934); font-size: 12.5px; line-height: 1.4; color: var(--muted, #8c94a3); }
   .do svg { stroke: var(--green, #1ed760); }
   .dont svg { stroke: #ff6b5e; }
 </style>

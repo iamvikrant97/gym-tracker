@@ -126,6 +126,15 @@ describe('Settings screen', () => {
     expect(await screen.findByText(`${location.origin}/gym-tracker/`)).toBeTruthy();
   });
 
+  it('says Spotify Premium is needed and explains how to connect', async () => {
+    render(Settings);
+    expect(await screen.findByText(/Spotify Premium is needed/)).toBeTruthy();
+    const how = screen.getByText('How to connect').closest('details')!;
+    expect(how.textContent).toContain('Client ID');
+    expect(how.textContent).toContain('add your Spotify email');
+    expect(how.textContent).toContain('play any song once');
+  });
+
   it('saves weekly target, body weight and pause', async () => {
     render(Settings);
     const target = await screen.findByLabelText('Sessions per week');
