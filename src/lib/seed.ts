@@ -4,7 +4,7 @@ import type { Exercise, Muscle, Plan, SessionId, SessionTemplate } from './types
 const slug = (n: string) =>
   n.toLowerCase().replace(/[()]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-type Equip = 'Machine' | 'Cable' | 'Smith' | 'Barbell' | 'Dumbbells' | 'Bodyweight';
+export type Equip = 'Machine' | 'Cable' | 'Smith' | 'Barbell' | 'Dumbbells' | 'Bodyweight';
 
 // slot, name, muscle, equipment, kind (c = compound, i = isolation), repMin, repMax, extras
 type Row = [string, string, Muscle, Equip, 'c' | 'i', number, number, Partial<Exercise>?];
@@ -103,6 +103,9 @@ export const EXERCISES: Exercise[] = LIB.map(([slot, name, muscle, eq, k, repMin
     ...extra,
   };
 });
+
+/** Equipment of each library exercise, by id. Used by the exercise library filters. */
+export const EQUIPMENT: Record<string, Equip> = Object.fromEntries(LIB.map((r) => [slug(r[1]), r[3]]));
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 export function exerciseById(id: string): Exercise | undefined {
