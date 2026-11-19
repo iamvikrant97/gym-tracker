@@ -67,7 +67,7 @@ describe('Settings: Training plan', () => {
 describe('Settings: local only', () => {
   it('without a Sheet it reminds her to export a backup', async () => {
     render(Settings);
-    expect((await screen.findByTestId('backup-reminder')).textContent).toContain('Export a backup every few weeks');
+    expect((await screen.findByTestId('backup-reminder')).textContent).toContain('Your history is only on this phone');
     expect(screen.getByRole('button', { name: 'Export backup' })).toBeTruthy();
   });
 

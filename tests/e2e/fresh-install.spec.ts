@@ -74,9 +74,9 @@ test('fresh install: setup -> Full body A -> first workout -> still set up after
   await expect(sheet).toContainText('No history yet');
   for (let i = 0; i < 4; i++) await sheet.getByRole('button', { name: 'More weight' }).click();
   await sheet.getByRole('button', { name: 'Save set' }).click();
-  await expect(page.getByTestId('meter-label')).toContainText('1 of 13 sets');
+  await expect(page.getByTestId('meter-label')).toContainText('1 of 15 sets');
   await leg.getByRole('button', { name: 'Complete set 2' }).click();
-  await expect(page.getByTestId('meter-label')).toContainText('2 of 13 sets');
+  await expect(page.getByTestId('meter-label')).toContainText('2 of 15 sets');
   await page.getByRole('button', { name: 'Finish workout' }).click();
   await expect(page).toHaveURL(/#\/summary$/);
   await expect(page.getByTestId('sum-sets')).toHaveText('2');
@@ -92,7 +92,7 @@ test('fresh install: setup -> Full body A -> first workout -> still set up after
   const plan = page.getByRole('article', { name: 'Training plan' });
   await expect(plan).toContainText('Full body A/B');
   await expect(plan).toContainText('Mon · Wed · Fri · 3 a week');
-  await expect(page.getByTestId('backup-reminder')).toContainText('Export a backup every few weeks');
+  await expect(page.getByTestId('backup-reminder')).toContainText('Your history is only on this phone');
   await plan.getByRole('button', { name: 'Change plan' }).click();
   await expect(page.getByRole('heading', { name: 'How many days a week?' })).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();

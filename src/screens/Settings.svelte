@@ -7,6 +7,7 @@
   } from '../lib/sync';
   import type { SyncState } from '../lib/sync';
   import { backupFileName, exportAll, restoreBackup } from '../lib/backup';
+  import { backupStatus, lastBackupAt, lastBackupLabel, markBackedUp } from '../lib/backupReminder';
   import { previewDuplicates, removeDuplicates } from '../lib/dedupe';
   import type { DupPreview } from '../lib/dedupe';
   import type { SetLog } from '../lib/types';
@@ -303,6 +304,17 @@
   }
 
   // ---- backup ----
+  let lastBackup = $state<number | null>(lastBackupAt());
+  let allSets = $state.raw<SetLog[]>([]);
+  const bk = $derived(backupStatus(allSets, lastBackup, Date.now()));
+  const savedNow = () => { markBackedUp(); lastBackup = lastBackupAt(); };
+  onMount(() => {
+    getAll<SetLog>('sets').then((x) => (allSets = x)).catch(() => {});
+    // The Home "!" sends people here: bring the Backup card into view.
+    let flag = false;
+    try { flag = sessionStorage.getItem('gym.focusBackup') === '1'; sessionStorage.removeItem('gym.focusBackup'); } catch { /* no storage */ }
+    if (flag) setTimeout(() => document.getElementById('backup-card')?.scrollIntoView({ block: 'start' }), 250);
+  });
   async function exportFile() {
     try {
       const data = JSON.stringify(await exportAll(), null, 1);
@@ -314,6 +326,7 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      savedNow();
       backupMsg = { text: `Saved ${a.download} to Downloads`, bad: false };
     } catch {
       backupMsg = { text: 'Could not save the file. Try Copy backup instead', bad: true };
@@ -322,6 +335,7 @@
   async function copyBackup() {
     try {
       await navigator.clipboard.writeText(JSON.stringify(await exportAll()));
+      savedNow();
       backupMsg = { text: 'Backup copied. Paste it into a note or an email to yourself', bad: false };
     } catch {
       backupMsg = { text: 'Copy did not work here. Use Export backup', bad: true };
@@ -487,10 +501,20 @@
   </article>
 
   <!-- Backup -->
-  <article class="card">
+  <article class="card" id="backup-card">
     <h2>Backup</h2>
-    {#if localOnly}<p class="status" data-testid="backup-reminder">Export a backup every few weeks. Your history is only on this phone.</p>{/if}
-    <p class="hint">The Sheet is your main backup. This file is a second copy of everything on this phone (without the key or Spotify login).</p>
+    {#if loaded && (localOnly || bk.due)}
+      <div class="important" class:glow={bk.due} role="note" data-testid="backup-reminder">
+        <span class="bang" aria-hidden="true">!</span>
+        <p><strong>{bk.due ? 'Time to back up your data.' : 'Important: back up your data.'}</strong> {localOnly ? 'Your history is only on this phone. If you lose the phone or clear the app’s data, it is gone. Export a backup every week or two.' : 'It has been a while since your last backup.'}</p>
+      </div>
+    {/if}
+    <p class="status" data-testid="backup-last">{lastBackupLabel(lastBackup, Date.now())}</p>
+    {#if localOnly}
+      <p class="hint">The file is a copy of everything on this phone (without any Spotify login). Keep it somewhere other than this phone, like your email or Google Drive.</p>
+    {:else}
+      <p class="hint">The Sheet is your main backup. This file is a second copy of everything on this phone (without the key or Spotify login).</p>
+    {/if}
     <div class="pair">
       <button class="secondary press" type="button" onclick={exportFile}>Export backup</button>
       <button class="secondary press" type="button" onclick={copyBackup}>Copy backup</button>
@@ -593,6 +617,12 @@
   .switch[aria-checked='true'] i { transform: translateX(20px); background: var(--blue); }
   .how ol { margin: 0 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; }
   .how .hint { margin-bottom: 12px; }
+  .important { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: rgba(242, 181, 68, 0.1); border: 1px solid rgba(242, 181, 68, 0.45); }
+  .important p { margin: 0; font-size: 14px; line-height: 1.4; } .important strong { color: var(--amber); }
+  .bang { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--amber); color: #1a1405; font: 800 15px/1 var(--display); }
+  .important.glow { animation: bkglow 2.4s ease-in-out infinite; }
+  @keyframes bkglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(242, 181, 68, 0); } 50% { box-shadow: 0 0 14px 2px rgba(242, 181, 68, 0.45); } }
+  @media (prefers-reduced-motion: reduce) { .important.glow { animation: none; box-shadow: 0 0 12px 1px rgba(242, 181, 68, 0.4); } }
   details { border-top: 1px solid var(--line); }
   summary { display: flex; align-items: center; min-height: 48px; cursor: pointer; font-weight: 600; list-style: none; }
   summary::-webkit-details-marker { display: none; }
