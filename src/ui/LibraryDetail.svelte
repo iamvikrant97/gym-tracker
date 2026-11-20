@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  export interface UseActions { slotName: string | null; inWorkout: boolean; swap: (() => Promise<void>) | null; add: (() => Promise<void>) | null }
+</script>
+
 <script lang="ts">
   import FormFigure from './FormFigure.svelte';
   import AngleView, { type Kind } from './AngleView.svelte';
@@ -7,7 +11,9 @@
   import { PATTERNS } from '../lib/patterns';
   import { EXERCISES, EQUIPMENT, swapOptions } from '../lib/seed';
 
-  let { exerciseId, onopen }: { exerciseId: string; onopen: (id: string) => void } = $props();
+  let { exerciseId, onopen, use = null }: { exerciseId: string; onopen: (id: string) => void; use?: UseActions | null } = $props();
+  let busy = $state(false);
+  async function run(fn: () => Promise<void>) { if (busy) return; busy = true; try { await fn(); } finally { busy = false; } }
 
   const LEGACY: Record<string, Kind> = { Chest: 'press-top', Legs: 'squat-front', Back: 'pulldown-back', Shoulders: 'press-front', Biceps: 'curl-front', Triceps: 'pushdown-front' };
   const FROM: Record<string, string> = { 'press-top': 'From above', 'fly-top': 'From above', 'squat-front': 'From front', 'pulldown-back': 'From behind', 'press-front': 'From front', 'curl-front': 'From front', 'pushdown-front': 'From front', 'lateral-front': 'From front', 'abduct-front': 'From front' };
@@ -32,6 +38,16 @@
 
 {#if ex}
 <div class="detail">
+  {#if use}
+    <div class="use" data-testid="library-use">
+      {#if use.inWorkout}
+        <p class="sub">Already in this workout.</p>
+      {:else}
+        {#if use.swap}<button type="button" class="go press" disabled={busy} onclick={() => run(use.swap!)}>Swap {use.slotName} for this</button>{/if}
+        {#if use.add}<button type="button" class="go alt2 press" disabled={busy} onclick={() => run(use.add!)}>Add to this workout</button>{/if}
+      {/if}
+    </div>
+  {/if}
   {#if guide && mu}
     <div class="seg" role="group" aria-label="View">
       <button type="button" aria-pressed={view === 'side'} onclick={() => (view = 'side')}>Side</button>
@@ -133,6 +149,10 @@
   .alts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .alt { display: flex; flex-direction: column; align-items: flex-start; min-height: 48px; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 13.5px; font-weight: 600; }
   .alt em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .use { display: grid; gap: 8px; margin: 2px 0 12px; }
+  .go { min-height: 52px; border-radius: 14px; background: var(--blue); color: #fff; font-weight: 700; font-size: 15px; }
+  .go.alt2 { background: var(--surface); border: 1px solid var(--blue); color: var(--blue-ink); }
+  .go:disabled { opacity: 0.5; }
   .nog { padding: 12px 0; color: #cfd4de; }
   @keyframes fadeIn { from { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .stage { animation: none; } }

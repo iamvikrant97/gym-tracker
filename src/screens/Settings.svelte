@@ -477,7 +477,7 @@
   <article class="card" aria-label="Exercise library">
     <h2>Exercise library</h2>
     <p class="hint">Browse every exercise with animated form guides. Search by name, muscle or equipment.</p>
-    <button class="secondary wide press" type="button" onclick={() => { try { sessionStorage.setItem('gym.libFrom', 'settings'); } catch { /* no storage */ } location.hash = '#/library'; }}>Open library</button>
+    <button class="secondary wide press" type="button" onclick={() => { try { sessionStorage.setItem('gym.libFrom', 'settings'); sessionStorage.removeItem('gym.libSlot'); } catch { /* no storage */ } location.hash = '#/library'; }}>Open library</button>
   </article>
 
   <!-- Exercises -->

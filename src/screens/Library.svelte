@@ -4,6 +4,8 @@
   import type { Exercise, Muscle } from '../lib/types';
   import { guideKeys } from '../lib/guideKeys';
   import LibrarySheet from '../ui/LibrarySheet.svelte';
+  import { workout } from '../lib/workout.svelte';
+  import { showToast } from '../ui/toast.svelte';
 
   const MUSCLES: Muscle[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs'];
   const EQUIP: Equip[] = ['Machine', 'Cable', 'Smith', 'Barbell', 'Dumbbells', 'Bodyweight'];
@@ -12,11 +14,40 @@
   let muscle = $state<Muscle | 'All'>('All');
   let equip = $state<Equip | 'All'>('All');
   let openId = $state<string | null>(null);
-  let from = 'settings';
+  let from = $state('settings');
+  let slot = $state<string | null>(null);
 
   onMount(() => {
-    try { from = sessionStorage.getItem('gym.libFrom') ?? 'settings'; } catch { /* no storage */ }
+    try {
+      from = sessionStorage.getItem('gym.libFrom') ?? 'settings';
+      slot = sessionStorage.getItem('gym.libSlot');
+    } catch { /* no storage */ }
   });
+
+  // Opened from the Swap sheet of a running workout: the guide gets buttons to use the exercise right away.
+  const slotName = $derived(slot ? workout.exercise(slot)?.name ?? null : null);
+  const canUse = $derived(from === 'workout' && !!workout.current);
+  function usable(id: string) {
+    if (!canUse) return null;
+    const inWorkout = workout.plannedSets().some((p) => p.exerciseId === id);
+    return {
+      slotName,
+      inWorkout,
+      swap: slot && slotName && id !== slot && !inWorkout ? async () => { await doUse(() => workout.swap(slot!, id, false), `Swapped to ${workout.exercise(id)?.name}`); } : null,
+      add: !inWorkout ? async () => { await doUse(() => workout.addExtra(id, false), `Added ${workout.exercise(id)?.name}`); } : null,
+    };
+  }
+  async function doUse(fn: () => Promise<void>, msg: string) {
+    try {
+      await fn();
+      showToast(msg);
+      openId = null;
+      location.hash = '#/workout';
+    } catch (e) {
+      console.error(e);
+      showToast('Could not change the workout');
+    }
+  }
   const back = () => (location.hash = from === 'workout' ? '#/workout' : '#/settings');
 
   const norm = (s: string) => s.toLowerCase();
@@ -75,7 +106,7 @@
   </ul>
 </section>
 
-<LibrarySheet exerciseId={openId} onopen={(id) => (openId = id)} onclose={() => (openId = null)} {meta} />
+<LibrarySheet exerciseId={openId} onopen={(id) => (openId = id)} onclose={() => (openId = null)} {meta} use={openId ? usable(openId) : null} />
 
 <style>
   .top { display: flex; align-items: center; gap: 4px; }

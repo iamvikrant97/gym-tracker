@@ -101,12 +101,12 @@ describe('Home: backup "!"', () => {
     expect(location.hash).toBe('#/settings');
     expect(sessionStorage.getItem('gym.focusBackup')).toBe('1');
   });
-  it('goes away right after a backup, then comes back green-to-red as days pass', async () => {
+  it('stays on Home after a backup, green, then goes green-to-red as days pass', async () => {
     await logOn('2026-11-05');
     markBackedUp(NOW);
     render(Home);
-    await screen.findByRole('button', { name: 'Settings' });
-    expect(screen.queryByRole('button', { name: /Back up your data/ })).toBeNull();
+    const fresh = await screen.findByRole('button', { name: /Back up your data\. Last backup: today/ });
+    expect(fresh.style.getPropertyValue('--h')).toBe('140');
     cleanup();
     markBackedUp(NOW - 3 * DAY);
     render(Home);

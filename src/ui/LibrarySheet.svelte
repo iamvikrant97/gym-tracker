@@ -3,11 +3,12 @@
   import { EXERCISES } from '../lib/seed';
   import type { Exercise } from '../lib/types';
   import type { Component } from 'svelte';
+  import type { UseActions } from './LibraryDetail.svelte';
 
-  let { exerciseId, onopen, onclose, meta }: { exerciseId: string | null; onopen: (id: string) => void; onclose: () => void; meta: (e: Exercise) => string } = $props();
+  let { exerciseId, onopen, onclose, meta, use = null }: { exerciseId: string | null; onopen: (id: string) => void; onclose: () => void; meta: (e: Exercise) => string; use?: UseActions | null } = $props();
 
   // The drawings and guide text are a separate chunk, loaded the first time a sheet opens.
-  let Detail = $state.raw<Component<{ exerciseId: string; onopen: (id: string) => void }> | null>(null);
+  let Detail = $state.raw<Component<{ exerciseId: string; onopen: (id: string) => void; use?: UseActions | null }> | null>(null);
   let failed = $state(false);
   $effect(() => {
     if (!exerciseId || Detail || failed) return;
@@ -23,7 +24,7 @@
 
 <Sheet open={exerciseId !== null} {onclose} title={last?.name ?? 'Exercise'} sub={last ? `${meta(last)} · ${last.kind === 'compound' ? 'Compound' : 'Isolation'}` : ''}>
   {#if exerciseId && Detail}
-    <Detail {exerciseId} {onopen} />
+    <Detail {exerciseId} {onopen} {use} />
   {:else if failed}
     <p class="msg">Could not load the guide. Check your connection and try again.</p>
   {:else}

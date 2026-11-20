@@ -53,7 +53,7 @@
   }
 
   function openLibrary() {
-    try { sessionStorage.setItem('gym.libFrom', 'workout'); } catch { /* no storage */ }
+    try { sessionStorage.setItem('gym.libFrom', 'workout'); sessionStorage.setItem('gym.libSlot', exerciseId); } catch { /* no storage */ }
     onclose();
     location.hash = '#/library';
   }

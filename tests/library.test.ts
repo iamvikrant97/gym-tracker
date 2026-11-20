@@ -7,6 +7,7 @@ import { guideKeys } from '../src/lib/guideKeys';
 import Library from '../src/screens/Library.svelte';
 import Settings from '../src/screens/Settings.svelte';
 import { closeDb } from '../src/lib/db';
+import { workout } from '../src/lib/workout.svelte';
 
 beforeEach(async () => {
   await closeDb();
@@ -65,5 +66,40 @@ describe('Settings: library row', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Open library' }));
     expect(location.hash).toBe('#/library');
     expect(sessionStorage.getItem('gym.libFrom')).toBe('settings');
+  });
+});
+
+describe('Library opened from a workout', () => {
+  async function open(id: string) {
+    await workout.startWorkout('CB-A', Date.now());
+    const slot = workout.plannedSets()[0].exerciseId;
+    sessionStorage.setItem('gym.libFrom', 'workout');
+    sessionStorage.setItem('gym.libSlot', slot);
+    render(Library);
+    const name = EXERCISES.find((e) => e.id === id)!.name;
+    await fireEvent.input(screen.getByLabelText('Search exercises'), { target: { value: name } });
+    await fireEvent.click(await screen.findByRole('button', { name: new RegExp(name) }));
+    return slot;
+  }
+  it('can swap the exercise you came from for the one you opened', async () => {
+    const id = EXERCISES.find((e) => e.id === 'cable-fly' && !workout.plannedSets().some((p) => p.exerciseId === e.id))?.id ?? 'cable-fly';
+    const slot = await open(id);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Swap .* for this$/ }));
+    await waitFor(() => expect(workout.plannedSets().some((p) => p.exerciseId === id)).toBe(true));
+    expect(workout.plannedSets().some((p) => p.exerciseId === slot)).toBe(false);
+    expect(location.hash).toBe('#/workout');
+  });
+  it('can add it on top of the workout instead', async () => {
+    const slot0 = (await workout.startWorkout('CB-A', Date.now()), workout.plannedSets()[0].exerciseId);
+    await open('hammer-curl');
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add to this workout' }));
+    await waitFor(() => expect(workout.plannedSets().some((p) => p.exerciseId === 'hammer-curl')).toBe(true));
+    expect(workout.plannedSets().some((p) => p.exerciseId === slot0)).toBe(true);
+  });
+  it('shows no buttons when opened from Settings', async () => {
+    render(Library);
+    await fireEvent.click(screen.getAllByRole('button', { name: /reps/ })[0]);
+    await screen.findByText(/general reference/);
+    expect(screen.queryByTestId('library-use')).toBeNull();
   });
 });

@@ -283,7 +283,7 @@
   <div class="home-top">
     <span class="date">{dateLabel}</span>
     <span class="sync"><i class:warn={syncWarn}></i>{syncStatus}</span>
-    {#if backup && tone && (backup.days ?? 0) > 1}
+    {#if backup && tone}
       <button class="bk press" type="button" style:--h={tone.hue} style:--g={tone.glow} aria-label="Back up your data. {lastBackupLabel(backup.last, now)}" onclick={openBackup}>!</button>
     {/if}
     <button class="gear press" type="button" aria-label="Settings" onclick={() => (location.hash = '#/settings')}>
